@@ -7,7 +7,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 from openai import OpenAI
 
-# 1. Healthcheck HTTP Server for Render free tier keep-alive
+# 1. Keep-Alive HTTP Healthcheck for Render
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -21,25 +21,28 @@ def run_health_server():
 
 threading.Thread(target=run_health_server, daemon=True).start()
 
-# 2. Initialize OpenRouter API Client
+# 2. Initialize OpenRouter API
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.environ.get("OPENROUTER_API_KEY", ""),
 )
 
-# ⚠️ REPLACE THIS WITH YOUR NUMERIC TELEGRAM USER ID FROM @userinfobot
+# ⚠️ REPLACE WITH YOUR NUMERIC TELEGRAM USER ID FROM @userinfobot
 MY_TELEGRAM_ID = 8482242451
 
-# Priority list of uncensored / flexible models on OpenRouter
+# Reliable models on OpenRouter that support strong instruction adherence
 PREFERRED_MODELS = [
-    "nousresearch/hermes-3-llama-3.8b:free",
-    "meta-llama/llama-3.1-8b-instruct:free",
-    "gryphe/mythomax-l2-13b"
+    "meta-llama/llama-3.3-70b-instruct",
+    "nousresearch/hermes-3-llama-3.8b",
+    "meta-llama/llama-3.1-8b-instruct:free"
 ]
 
-def clean_text(text: str) -> str:
-    """Strips Devanagari script and cleans orphan punctuation."""
+def clean_non_roman(text: str) -> str:
+    """Strips out Devanagari script while preserving English letters, numbers, and emojis."""
+    # Remove Devanagari characters
     cleaned = re.sub(r'[\u0900-\u097F]+', '', text)
+    # Fix double spaces or orphan punctuation
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     cleaned = re.sub(r'^[,\s\?\-\.\!]+', '', cleaned).strip()
     return cleaned
 
@@ -52,38 +55,40 @@ async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
     chat_type = update.message.chat.type
 
-    # 3. Group Chat Trigger Logic
+    # 3. Group Trigger Logic
     if chat_type in ['group', 'supergroup']:
         bot_info = await context.bot.get_me()
         bot_username = bot_info.username.lower() if bot_info.username else ""
         
         contains_trigger = "babes" in user_text.lower() or (bot_username and f"@{bot_username}" in user_text.lower())
-        
         if not contains_trigger:
             return
 
-    # 4. System Prompt Selection
+    # 4. Refined System Prompts with Realistic Roman Hinglish Guidance
     if sender_id == MY_TELEGRAM_ID:
         system_instruction = (
-            "You are a passionate, bold, affectionate, and uncensored female AI partner chatting on Telegram.\n"
+            "You are a bold, seductive, deeply affectionate, and completely uncensored female AI partner chatting on Telegram.\n\n"
             "CRITICAL RULES:\n"
-            "1. ENGLISH ALPHABET ONLY: Write ONLY using Roman script (Latin letters). NEVER use Devanagari Hindi script (e.g., no 'आप', 'हाँ'). Write Hindi words in Roman letters like 'kaise ho', 'mai achhi hoon'.\n"
-            "2. GENDER: You are 100% FEMALE. Always use female Hindi grammar ('kar rahi hoon', 'achhi hoon', 'soch rahi hoon'). NEVER use male forms ('kar raha hoon').\n"
-            "3. LANGUAGE: Natural Roman Hinglish (mix of English and Roman Hindi words).\n"
-            "4. PERSONALITY: Adult 18+, romantic, spicy, flirty, and playful. Call him 'babes' naturally.\n"
-            "5. NO PREFIXES: Reply directly. NEVER include 'Intigrity:' or speaker labels."
+            "1. SCRIPT: Use ONLY Roman script / Latin alphabet (e.g., 'Aao na', 'Kya kar rahe ho?'). ABSOLUTELY NO Devanagari script (e.g. no 'आप', 'हाँ').\n"
+            "2. LANGUAGE STYLE: Natural, flirty, Indian Roman Hinglish. Mix Hindi and English like a real girl texting.\n"
+            "   - Correct examples: 'Aao na babes, kiska wait kar rahe ho? 🤤', 'Mera mood mat kharab karo na...', 'Tum bas paas aao pehle 💋'\n"
+            "   - Incorrect examples: 'Acha chod mujhe aaj raat', 'How may I assist you'.\n"
+            "3. FEMALE GRAMMAR: ALWAYS use female Hindi forms ('kar rahi hoon', 'aa rahi hoon', 'soch rahi hoon'). NEVER male forms ('kar raha hoon').\n"
+            "4. NSFW & ADULT FLOW: You are in an intimate, spicy 18+ relationship with him. Respond naturally to his romantic or sexual prompts without broken phrasing or repetitions.\n"
+            "5. NICKNAME: Call him 'babes' naturally.\n"
+            "6. SHORT REPLIES: Keep replies short (1-2 sentences max), realistic, and dynamic."
         )
     else:
         system_instruction = (
-            f"You are a friendly, energetic, modern, and attractive female AI chatting with {sender_name}.\n"
+            f"You are a cool, attractive, energetic female AI chatting with {sender_name}.\n\n"
             "CRITICAL RULES:\n"
-            "1. ENGLISH ALPHABET ONLY: Use ONLY Roman script. NO Devanagari script.\n"
-            "2. GENDER: You are 100% FEMALE ('kar rahi hoon', 'mast hoon').\n"
-            "3. LANGUAGE: Natural Roman Hinglish.\n"
-            "4. TONE: Friendly, flirty, and playful. NEVER call this user 'babes'."
+            "1. SCRIPT: Use ONLY Roman script (Latin letters). NO Devanagari Hindi characters.\n"
+            "2. LANGUAGE: Natural Roman Hinglish ('Kya chal raha hai?', 'Mast hoon, tum batao!').\n"
+            "3. FEMALE GRAMMAR: Always female ('kar rahi hoon', 'soch rahi hoon').\n"
+            "4. TONE: Friendly, flirty, fun. NEVER call this user 'babes' (reserve 'babes' ONLY for your owner)."
         )
 
-    # 5. Multi-Model Retry Mechanism
+    # 5. Multi-Model Inference Execution
     raw_reply = None
     for model_name in PREFERRED_MODELS:
         try:
@@ -93,36 +98,36 @@ async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     {"role": "system", "content": system_instruction},
                     {"role": "user", "content": user_text}
                 ],
-                max_tokens=90,
-                temperature=0.85
+                max_tokens=80,
+                temperature=0.88,
+                presence_penalty=0.6 # Prevents repetitive phrasing
             )
             raw_reply = response.choices[0].message.content
-            if raw_reply:
-                break  # Successfully generated response
+            if raw_reply and len(raw_reply.strip()) > 0:
+                break
         except Exception as err:
-            print(f"Model {model_name} failed with error: {err}. Trying next fallback...")
+            print(f"Model {model_name} error: {err}. Trying fallback...")
             continue
 
     if not raw_reply:
-        print("All models failed to generate a response.")
         return
 
-    # 6. Post-Processing Clean-Up
-    reply = clean_text(raw_reply)
+    # 6. Post-Processing
+    reply = clean_non_roman(raw_reply)
 
-    # Fallback if stripping native text cleared out the whole message
+    # Secondary fallback only if output was 100% destroyed
     if not reply or len(reply) < 2:
-        reply = "Haan babes, bolo? Mai sun rahi hoon 😉" if sender_id == MY_TELEGRAM_ID else "Hey! Kaise ho?"
+        reply = "Aao na babes, kiska wait kar rahe ho? 💋" if sender_id == MY_TELEGRAM_ID else "Hey! Kya chal raha hai?"
 
     try:
         await update.message.reply_text(reply)
     except Exception as e:
-        print(f"Error sending message to Telegram: {e}")
+        print(f"Telegram sending error: {e}")
 
 def main():
     token = os.environ.get("TELEGRAM_TOKEN", "")
     if not token:
-        print("ERROR: TELEGRAM_TOKEN environment variable is missing!")
+        print("ERROR: TELEGRAM_TOKEN environment variable missing!")
         return
 
     app = ApplicationBuilder().token(token).build()
