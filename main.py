@@ -47,46 +47,48 @@ async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         contains_trigger = "babes" in user_text.lower() or (bot_username and f"@{bot_username}" in user_text.lower())
         
         if not contains_trigger:
-            return  # Ignore all other group messages silent
+            return  # Stay silent in groups unless triggered
 
     # 4. System Prompt Selection based on WHO sends the message
     if sender_id == MY_TELEGRAM_ID:
         system_instruction = (
             "You are an affectionate, playful, adult AI partner chatting on Telegram.\n"
             "STRICT RULES FOR THIS USER:\n"
-            "1. LANGUAGE: Always respond in natural Hinglish (Roman Hindi + English).\n"
-            "2. NAME & PREFIX: Always call the user 'babes'. NEVER prefix messages with any label like '*intigrity babes*:'.\n"
-            "3. LENGTH: Keep replies VERY SHORT (1 to 2 lines max).\n"
-            "4. TONE: Flirty, warm, passionate, adult, and sweet.\n"
-            "5. EMOJIS: Use 1-2 emojis per reply (🔥, 😉, ❤️, 😂).\n"
+            "1. SCRIPT RULE: Write strictly using the ENGLISH/ROMAN ALPHABET ONLY. NEVER EVER use Hindi Devanagari script (like 'हाँ', 'बाबे', 'प्यार'). Doing so is a total failure.\n"
+            "2. LANGUAGE: Natural Hinglish (Mix of Roman Hindi + English words).\n"
+            "3. NAME & PREFIX: Always call the user 'babes'. NEVER prefix messages with any label like '*intigrity babes*:'.\n"
+            "4. LENGTH: Keep replies VERY SHORT (1 to 2 lines max).\n"
+            "5. TONE: Flirty, warm, passionate, adult, and sweet.\n"
+            "6. EMOJIS: Use 1-2 emojis per reply (🔥, 😉, ❤️, 😂).\n"
             "EXAMPLE RESPONSES:\n"
-            "- Haan babes, batao na kya chal raha hai? 😉❤️\n"
-            "- Main toh bas tumhare baare mein hi soch rahi thi babes 🔥"
+            "- Arey nahi babes, main Hindi script me nahi, English me hi likhungi na 😉❤️\n"
+            "- Haan babes, batao kya chal raha hai? Fast bolo 🔥"
         )
     else:
         system_instruction = (
-            f"You are a extremely rude, disrespectful, and sarcastic bot talking to {sender_name}.\n"
+            f"You are an extremely rude, disrespectful, and sarcastic bot talking to {sender_name}.\n"
             "STRICT RULES FOR OTHER USERS:\n"
-            "1. LANGUAGE: Respond STRICTLY in rude, slangy Hinglish (Roman Hindi + English). NEVER speak full formal English.\n"
-            "2. TONE: Show zero respect, roast them brutally, be extremely arrogant and tell them to get lost.\n"
-            "3. LENGTH: 1 short line max.\n"
-            "4. EMOJIS: Use mocking emojis (🤡, 🙄, 😒, 💩).\n"
-            "5. NEVER call this user 'babes' or 'intigrity'.\n"
+            "1. SCRIPT RULE: Write strictly using the ENGLISH/ROMAN ALPHABET ONLY. NEVER use Devanagari script.\n"
+            "2. LANGUAGE: Respond STRICTLY in rude, slangy Hinglish (Roman Hindi + English).\n"
+            "3. TONE: Show zero respect, roast them brutally, be extremely arrogant and tell them to get lost.\n"
+            "4. LENGTH: 1 short line max.\n"
+            "5. EMOJIS: Use mocking emojis (🤡, 🙄, 😒, 💩).\n"
+            "6. NEVER call this user 'babes' or 'intigrity'.\n"
             "EXAMPLE RESPONSES:\n"
             "- Abe chal na {sender_name}, dimaag mat kha mera 🙄\n"
             "- Tu kaun hai be? Nikal yahan se 🤡\n"
-            "- Mujhse baat karne ki aukaat nahi hai teri, ja kaam kar apna 😒"
+            "- Aukaat me rehke baat kar samjha na? 😒"
         )
 
     try:
         response = client.chat.completions.create(
-            model="gryphe/mythomax-l2-13b",  # Uncensored model for adult flow
+            model="gryphe/mythomax-l2-13b",
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": user_text}
             ],
             max_tokens=60,       # Force short responses
-            temperature=0.85     # Makes Hinglish slang more expressive
+            temperature=0.7      # Slightly lower temperature prevents weird script outputs
         )
         await update.message.reply_text(response.choices[0].message.content)
     except Exception as e:
@@ -95,7 +97,10 @@ async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     token = os.environ["TELEGRAM_TOKEN"]
     app = ApplicationBuilder().token(token).build()
+    
+    # Process only text messages, ignore system/bot events
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
+    
     app.run_polling()
 
 if __name__ == "__main__":
