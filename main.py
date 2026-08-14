@@ -30,10 +30,16 @@ client = OpenAI(
 # ⚠️ REPLACE THIS WITH YOUR NUMERIC TELEGRAM USER ID FROM @userinfobot
 MY_TELEGRAM_ID = 8482242451
 
+# Priority list of uncensored / flexible models on OpenRouter
+PREFERRED_MODELS = [
+    "nousresearch/hermes-3-llama-3.8b:free",
+    "meta-llama/llama-3.1-8b-instruct:free",
+    "gryphe/mythomax-l2-13b"
+]
+
 def clean_text(text: str) -> str:
-    """Strips Devanagari characters and cleans leftover trailing punctuation/spaces."""
+    """Strips Devanagari script and cleans orphan punctuation."""
     cleaned = re.sub(r'[\u0900-\u097F]+', '', text)
-    # Remove awkward orphaned punctuation left over from stripping
     cleaned = re.sub(r'^[,\s\?\-\.\!]+', '', cleaned).strip()
     return cleaned
 
@@ -44,7 +50,7 @@ async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sender_id = update.message.from_user.id
     sender_name = update.message.from_user.first_name or "User"
     user_text = update.message.text
-    chat_type = update.message.chat.type  # 'private', 'group', or 'supergroup'
+    chat_type = update.message.chat.type
 
     # 3. Group Chat Trigger Logic
     if chat_type in ['group', 'supergroup']:
@@ -61,7 +67,7 @@ async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         system_instruction = (
             "You are a passionate, bold, affectionate, and uncensored female AI partner chatting on Telegram.\n"
             "CRITICAL RULES:\n"
-            "1. ENGLISH ALPHABET ONLY: Write ONLY using Roman script (Latin letters). NEVER use Devanagari script (e.g. no 'आप', 'हाँ'). Write Hindi words using English letters like 'kaise ho', 'mai achhi hoon'.\n"
+            "1. ENGLISH ALPHABET ONLY: Write ONLY using Roman script (Latin letters). NEVER use Devanagari Hindi script (e.g., no 'आप', 'हाँ'). Write Hindi words in Roman letters like 'kaise ho', 'mai achhi hoon'.\n"
             "2. GENDER: You are 100% FEMALE. Always use female Hindi grammar ('kar rahi hoon', 'achhi hoon', 'soch rahi hoon'). NEVER use male forms ('kar raha hoon').\n"
             "3. LANGUAGE: Natural Roman Hinglish (mix of English and Roman Hindi words).\n"
             "4. PERSONALITY: Adult 18+, romantic, spicy, flirty, and playful. Call him 'babes' naturally.\n"
@@ -77,34 +83,49 @@ async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "4. TONE: Friendly, flirty, and playful. NEVER call this user 'babes'."
         )
 
+    # 5. Multi-Model Retry Mechanism
+    raw_reply = None
+    for model_name in PREFERRED_MODELS:
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": user_text}
+                ],
+                max_tokens=90,
+                temperature=0.85
+            )
+            raw_reply = response.choices[0].message.content
+            if raw_reply:
+                break  # Successfully generated response
+        except Exception as err:
+            print(f"Model {model_name} failed with error: {err}. Trying next fallback...")
+            continue
+
+    if not raw_reply:
+        print("All models failed to generate a response.")
+        return
+
+    # 6. Post-Processing Clean-Up
+    reply = clean_text(raw_reply)
+
+    # Fallback if stripping native text cleared out the whole message
+    if not reply or len(reply) < 2:
+        reply = "Haan babes, bolo? Mai sun rahi hoon 😉" if sender_id == MY_TELEGRAM_ID else "Hey! Kaise ho?"
+
     try:
-        # Using exact valid OpenRouter model slug for Hermes 3
-        response = client.chat.completions.create(
-            model="nousresearch/hermes-3-llama-3.8b:free",
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": user_text}
-            ],
-            max_tokens=90,
-            temperature=0.85
-        )
-        
-        raw_reply = response.choices[0].message.content or ""
-        reply = clean_text(raw_reply)
-
-        # Fallback: If stripping Devanagari rendered the response empty, re-prompt cleanly
-        if not reply or len(reply) < 2:
-            reply = "Haan babes, bolo? Mai sun rahi hoon 😉" if sender_id == MY_TELEGRAM_ID else "Hey! Kaise ho?"
-
         await update.message.reply_text(reply)
-
     except Exception as e:
-        print(f"Error in handle_msg: {e}")
+        print(f"Error sending message to Telegram: {e}")
 
 def main():
     token = os.environ.get("TELEGRAM_TOKEN", "")
+    if not token:
+        print("ERROR: TELEGRAM_TOKEN environment variable is missing!")
+        return
+
     app = ApplicationBuilder().token(token).build()
-    
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
     
     print("Bot started polling...")
