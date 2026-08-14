@@ -22,7 +22,7 @@ def run_health_server():
 threading.Thread(target=run_health_server, daemon=True).start()
 
 # Initialize Groq
-groq_client = Groq(api_key=os.environ["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"])
+groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
 async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
