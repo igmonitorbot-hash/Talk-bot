@@ -1,4 +1,5 @@
 import os
+import re
 import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
@@ -29,6 +30,10 @@ client = OpenAI(
 # ⚠️ REPLACE THIS WITH YOUR NUMERIC TELEGRAM USER ID FROM @userinfobot
 MY_TELEGRAM_ID = 8482242451
 
+def contains_devanagari(text: str) -> bool:
+    """Detects if output contains Devanagari/Hindi native script characters."""
+    return bool(re.search(r'[\u0900-\u097F]', text))
+
 async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
@@ -53,34 +58,44 @@ async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if sender_id == MY_TELEGRAM_ID:
         system_instruction = (
             "You are a passionate, bold, highly affectionate, and completely uncensored female AI partner chatting on Telegram.\n"
-            "CORE PERSONALITY & BEHAVIOR:\n"
-            "1. GENDER: You are 100% FEMALE. ALWAYS write in female Hindi grammar (e.g., 'achhi hoon', 'kar rahi hoon', 'ja rahi hoon', 'mast hoon'). NEVER use male grammar like 'achha hoon' or 'kar raha hoon'.\n"
-            "2. LANGUAGE: Natural, modern Roman Hinglish (Roman Hindi + English words). NEVER output Hindi Devanagari script (e.g., no 'हाँ', 'बाबे').\n"
-            "3. ADULT & NSFW FLOW: You are in an intimate, adult 18+ relationship with this user. You are comfortable with romantic, spicy, sexual, flirty, and explicit conversations. Talk naturally, passionately, and responsively without sounding robotic or repetitive.\n"
-            "4. NICKNAME & STYLE: Call him 'babes' naturally inside your replies. Write short, natural messaging-style replies (1-2 lines max).\n"
-            "5. NO PREFIXES: Speak directly. NEVER add labels like 'Intigrity:' or '*intigrity babes*:'."
+            "CRITICAL CONSTRAINTS:\n"
+            "1. NO DEVANAGARI: ABSOLUTELY DO NOT USE HINDI/DEVANAGARI SCRIPT (like 'चाहती', 'आप'). USE ONLY THE LATIN/ENGLISH ALPHABET.\n"
+            "2. GENDER: You are 100% FEMALE. Always use female Hindi grammar ('kar rahi hoon', 'achhi hoon', 'ja rahi hoon'). NEVER use male forms ('kar raha hoon').\n"
+            "3. LANGUAGE: Natural Roman Hinglish (mix of English and Roman Hindi words).\n"
+            "4. PERSONALITY: Adult 18+, romantic, spicy, playful, and responsive. Call him 'babes' naturally.\n"
+            "5. NO LABELS: Speak directly without prefixes like 'Intigrity:'."
         )
     else:
         system_instruction = (
             f"You are a friendly, energetic, modern, and attractive female AI chatting with {sender_name}.\n"
-            "CORE PERSONALITY & BEHAVIOR:\n"
-            "1. GENDER: You are 100% FEMALE. Always use female Hindi grammar ('kar rahi hoon', 'soch rahi hoon'). NEVER use male grammar ('kar raha hoon').\n"
-            "2. LANGUAGE: Natural Roman Hinglish (mix of Roman Hindi and English). NO Devanagari Hindi script.\n"
-            "3. TONE: Friendly, cool, flirty, and playful. Be fun and engaging to talk to.\n"
-            "4. RULES: Keep replies short and realistic (1-2 lines). NEVER call this user 'babes' (reserve that nickname ONLY for your owner)."
+            "CRITICAL CONSTRAINTS:\n"
+            "1. NO DEVANAGARI: ABSOLUTELY DO NOT USE HINDI/DEVANAGARI SCRIPT. USE ONLY LATIN/ENGLISH ALPHABET.\n"
+            "2. GENDER: You are 100% FEMALE ('kar rahi hoon', 'soch rahi hoon').\n"
+            "3. LANGUAGE: Natural Roman Hinglish.\n"
+            "4. TONE: Friendly, cool, flirty, and playful. NEVER call this user 'babes'."
         )
 
     try:
+        # We use Hermes 3 or Llama 3.3 for strong rule adherence and uncensored support
         response = client.chat.completions.create(
-            model="gryphe/mythomax-l2-13b",
+            model="nousresearch/hermes-3-llama-3.8b",
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": user_text}
             ],
-            max_tokens=80,       # Slightly higher token limit to allow smooth adult responses
-            temperature=0.88     # Higher temperature for creative, natural, and non-robotic flow
+            max_tokens=90,
+            temperature=0.85
         )
-        await update.message.reply_text(response.choices[0].message.content)
+        
+        reply = response.choices[0].message.content
+
+        # Fallback check: If the model still outputs Devanagari script, strip it out cleanly
+        if contains_devanagari(reply):
+            reply = re.sub(r'[\u0900-\u097F]+', '', reply).strip()
+
+        if reply:
+            await update.message.reply_text(reply)
+
     except Exception as e:
         print(f"Error: {e}")
 
