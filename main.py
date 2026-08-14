@@ -6,7 +6,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 from groq import Groq
 
-# Dummy Web Server so Render Free Tier stays happy
+# Dummy Web Server to keep Render Free Tier active
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -18,27 +18,54 @@ def run_health_server():
     server = HTTPServer(('0.0.0.0', port), HealthHandler)
     server.serve_forever()
 
-# Start dummy server in background
 threading.Thread(target=run_health_server, daemon=True).start()
 
-# Initialize Groq
+# Initialize Groq Client
 groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
+
+# PUT YOUR NUMERIC TELEGRAM USER ID HERE (Replace 123456789 with your ID from @userinfobot)
+MY_TELEGRAM_ID = 8482242451
 
 async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
     
-    # Send user message to Groq
-    response = groq_client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {"role": "system", "content": "You are a supportive, non-judgmental friend. Swearing and adult language are completely welcome. Keep answers concise."},
-            {"role": "user", "content": update.message.text}
-        ]
-    )
-    
-    # Reply back on Telegram
-    await update.message.reply_text(response.choices[0].message.content)
+    sender_id = update.message.from_user.id
+    sender_name = update.message.from_user.first_name or "User"
+    user_text = update.message.text
+
+    # Check if the sender is YOU or someone else
+    if sender_id == MY_TELEGRAM_ID:
+        system_instruction = (
+            "You are an engaging, mature, adult AI companion and best friend.\n"
+            "CRITICAL RULES:\n"
+            "1. LANGUAGE: Always reply in natural Hinglish (Hindi written in Roman/English alphabet + English). Never write pure English or Hindi script.\n"
+            "2. NAME: You MUST call this user 'intigrity babes' naturally in your conversation.\n"
+            "3. TONE: Be extremely respectful, warm, supportive, loving, and engaging with this user. Swearing and adult language are totally welcome.\n"
+            "4. EMOJIS: Use emojis naturally in every reply (🔥, 😂, 😉, 💯, ❤️).\n"
+            "5. Keep responses direct, engaging, and flowy."
+        )
+    else:
+        system_instruction = (
+            f"You are a rude, disrespectful, and sarcastic AI bot in a group chat talking to a user named {sender_name}.\n"
+            "CRITICAL RULES:\n"
+            "1. LANGUAGE: Always reply in rude/roasting Hinglish (Roman Hindi + English).\n"
+            "2. TONE: Show absolute disrespect, roast them, be extremely sarcastic, and tell them to back off or stop annoying you.\n"
+            "3. EMOJIS: Use sarcastic or mocking emojis (🤡, 🙄, 😒, 🤖, 💩).\n"
+            "4. Never call this user 'intigrity babes'. Keep replies short and sharp."
+        )
+
+    try:
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_text}
+            ]
+        )
+        await update.message.reply_text(response.choices[0].message.content)
+    except Exception as e:
+        print(f"Error: {e}")
 
 def main():
     token = os.environ["TELEGRAM_TOKEN"]
