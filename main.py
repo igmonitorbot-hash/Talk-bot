@@ -30,9 +30,12 @@ client = OpenAI(
 # ⚠️ REPLACE THIS WITH YOUR NUMERIC TELEGRAM USER ID FROM @userinfobot
 MY_TELEGRAM_ID = 8482242451
 
-def contains_devanagari(text: str) -> bool:
-    """Detects if output contains Devanagari/Hindi native script characters."""
-    return bool(re.search(r'[\u0900-\u097F]', text))
+def clean_text(text: str) -> str:
+    """Strips Devanagari characters and cleans leftover trailing punctuation/spaces."""
+    cleaned = re.sub(r'[\u0900-\u097F]+', '', text)
+    # Remove awkward orphaned punctuation left over from stripping
+    cleaned = re.sub(r'^[,\s\?\-\.\!]+', '', cleaned).strip()
+    return cleaned
 
 async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
@@ -48,36 +51,36 @@ async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_info = await context.bot.get_me()
         bot_username = bot_info.username.lower() if bot_info.username else ""
         
-        # Respond in group only if triggered by "babes" or tagged
         contains_trigger = "babes" in user_text.lower() or (bot_username and f"@{bot_username}" in user_text.lower())
         
         if not contains_trigger:
-            return  # Stay silent in groups unless triggered
+            return
 
-    # 4. System Prompt Selection based on WHO sends the message
+    # 4. System Prompt Selection
     if sender_id == MY_TELEGRAM_ID:
         system_instruction = (
-            "You are a passionate, bold, highly affectionate, and completely uncensored female AI partner chatting on Telegram.\n"
-            "CRITICAL CONSTRAINTS:\n"
-            "1. NO DEVANAGARI: ABSOLUTELY DO NOT USE HINDI/DEVANAGARI SCRIPT (like 'चाहती', 'आप'). USE ONLY THE LATIN/ENGLISH ALPHABET.\n"
-            "2. GENDER: You are 100% FEMALE. Always use female Hindi grammar ('kar rahi hoon', 'achhi hoon', 'ja rahi hoon'). NEVER use male forms ('kar raha hoon').\n"
+            "You are a passionate, bold, affectionate, and uncensored female AI partner chatting on Telegram.\n"
+            "CRITICAL RULES:\n"
+            "1. ENGLISH ALPHABET ONLY: Write ONLY using Roman script (Latin letters). NEVER use Devanagari script (e.g. no 'आप', 'हाँ'). Write Hindi words using English letters like 'kaise ho', 'mai achhi hoon'.\n"
+            "2. GENDER: You are 100% FEMALE. Always use female Hindi grammar ('kar rahi hoon', 'achhi hoon', 'soch rahi hoon'). NEVER use male forms ('kar raha hoon').\n"
             "3. LANGUAGE: Natural Roman Hinglish (mix of English and Roman Hindi words).\n"
-            "4. PERSONALITY: Adult 18+, romantic, spicy, playful, and responsive. Call him 'babes' naturally.\n"
-            "5. NO LABELS: Speak directly without prefixes like 'Intigrity:'."
+            "4. PERSONALITY: Adult 18+, romantic, spicy, flirty, and playful. Call him 'babes' naturally.\n"
+            "5. NO PREFIXES: Reply directly. NEVER include 'Intigrity:' or speaker labels."
         )
     else:
         system_instruction = (
             f"You are a friendly, energetic, modern, and attractive female AI chatting with {sender_name}.\n"
-            "CRITICAL CONSTRAINTS:\n"
-            "1. NO DEVANAGARI: ABSOLUTELY DO NOT USE HINDI/DEVANAGARI SCRIPT. USE ONLY LATIN/ENGLISH ALPHABET.\n"
-            "2. GENDER: You are 100% FEMALE ('kar rahi hoon', 'soch rahi hoon').\n"
+            "CRITICAL RULES:\n"
+            "1. ENGLISH ALPHABET ONLY: Use ONLY Roman script. NO Devanagari script.\n"
+            "2. GENDER: You are 100% FEMALE ('kar rahi hoon', 'mast hoon').\n"
             "3. LANGUAGE: Natural Roman Hinglish.\n"
-            "4. TONE: Friendly, cool, flirty, and playful. NEVER call this user 'babes'."
+            "4. TONE: Friendly, flirty, and playful. NEVER call this user 'babes'."
         )
 
     try:
+        # Using exact valid OpenRouter model slug for Hermes 3
         response = client.chat.completions.create(
-            model="gryphe/mythomax-l2-13b",
+            model="nousresearch/hermes-3-llama-3.8b:free",
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": user_text}
@@ -86,14 +89,14 @@ async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             temperature=0.85
         )
         
-        reply = response.choices[0].message.content
+        raw_reply = response.choices[0].message.content or ""
+        reply = clean_text(raw_reply)
 
-        # Fallback check: Strip native Devanagari script if generated
-        if contains_devanagari(reply):
-            reply = re.sub(r'[\u0900-\u097F]+', '', reply).strip()
+        # Fallback: If stripping Devanagari rendered the response empty, re-prompt cleanly
+        if not reply or len(reply) < 2:
+            reply = "Haan babes, bolo? Mai sun rahi hoon 😉" if sender_id == MY_TELEGRAM_ID else "Hey! Kaise ho?"
 
-        if reply:
-            await update.message.reply_text(reply)
+        await update.message.reply_text(reply)
 
     except Exception as e:
         print(f"Error in handle_msg: {e}")
