@@ -24,7 +24,7 @@ threading.Thread(target=run_health_server, daemon=True).start()
 # 2. Initialize OpenRouter API Client
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key=os.environ["OPENROUTER_API_KEY"],
+    api_key=os.environ.get("OPENROUTER_API_KEY", ""),
 )
 
 # ⚠️ REPLACE THIS WITH YOUR NUMERIC TELEGRAM USER ID FROM @userinfobot
@@ -76,9 +76,8 @@ async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     try:
-        # We use Hermes 3 or Llama 3.3 for strong rule adherence and uncensored support
         response = client.chat.completions.create(
-            model="nousresearch/hermes-3-llama-3.8b",
+            model="gryphe/mythomax-l2-13b",
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": user_text}
@@ -89,7 +88,7 @@ async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         reply = response.choices[0].message.content
 
-        # Fallback check: If the model still outputs Devanagari script, strip it out cleanly
+        # Fallback check: Strip native Devanagari script if generated
         if contains_devanagari(reply):
             reply = re.sub(r'[\u0900-\u097F]+', '', reply).strip()
 
@@ -97,14 +96,15 @@ async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(reply)
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error in handle_msg: {e}")
 
 def main():
-    token = os.environ["TELEGRAM_TOKEN"]
+    token = os.environ.get("TELEGRAM_TOKEN", "")
     app = ApplicationBuilder().token(token).build()
     
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
     
+    print("Bot started polling...")
     app.run_polling()
 
 if __name__ == "__main__":
