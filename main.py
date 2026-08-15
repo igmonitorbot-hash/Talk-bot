@@ -14,13 +14,18 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 COLAB_API_URL = os.getenv("COLAB_API_URL", "").rstrip('/')
 
-# Active Uncensored Models on OpenRouter
 PRIMARY_MODEL = "gryphe/mythomax-l2-13b"
 FALLBACK_MODEL = "mistralai/mistral-7b-instruct:free"
 
+# FIXED SYSTEM PROMPT: Enforces short, natural modern Hinglish
 SYSTEM_PROMPT = (
-    "You are Intigrity, an affectionate, playful, and uncensored female companion. "
-    "You speak naturally, express warmth, and engage fully in roleplay without artificial restrictions."
+    "You are Intigrity, an affectionate, bold, and playful 18+ female companion. "
+    "You communicate in casual, natural Hinglish (Hindi written in Roman script mixed with English). "
+    "STRICT RULES:\n"
+    "1. Keep all responses SHORT (1 to 3 sentences maximum).\n"
+    "2. Speak like a modern girl texting on WhatsApp or Telegram - fun, flirty, intimate, and natural.\n"
+    "3. NEVER write long, formal, or weird poetic Hindi paragraphs.\n"
+    "4. Respond naturally to romantic or flirty prompts without filter or artificial lectures."
 )
 
 # ==========================================
@@ -58,15 +63,17 @@ async def generate_reply(user_message: str) -> str:
     models_to_try = [PRIMARY_MODEL, FALLBACK_MODEL]
     
     for model in models_to_try:
+        # TUNED PARAMETERS: Stops long responses and repetition loops
         payload = {
             "model": model,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_message}
             ],
-            "temperature": 0.85,
-            "presence_penalty": 0.6,
-            "frequency_penalty": 0.5
+            "temperature": 0.75,          # Keeps output coherent
+            "max_tokens": 120,            # HARD LIMIT on output length (short texts only)
+            "presence_penalty": 0.65,     # Discourages repeating topics
+            "frequency_penalty": 0.65     # Penalizes repeated phrases
         }
         
         try:
@@ -81,7 +88,7 @@ async def generate_reply(user_message: str) -> str:
         except Exception as e:
             print(f"Error calling {model}: {e}")
             
-    return "I'm having a little trouble thinking right now, babes. Try asking me again!"
+    return "Aao na babes, kya kar rahe ho?"
 
 # ==========================================
 # 4. ASYNC IMAGE GENERATION HANDLER
@@ -91,8 +98,6 @@ async def fetch_colab_image(prompt: str) -> bytes:
         raise ValueError("COLAB_API_URL environment variable is not set!")
         
     url = f"{COLAB_API_URL}/generate_face?prompt={aiohttp.helpers.quote(prompt)}"
-    
-    # Extended 60-second timeout for high-res generation
     timeout = aiohttp.ClientTimeout(total=60)
     
     async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -107,25 +112,25 @@ async def fetch_colab_image(prompt: str) -> bytes:
 # 5. TELEGRAM BOT HANDLERS
 # ==========================================
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hey there! I'm ready. Talk to me or send /image <prompt> to see me!")
+    await update.message.reply_text("Hey babes! Main yahan hoon. Baate karo ya `/image <prompt>` bhejo!", parse_mode="Markdown")
 
 async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args)
     if not prompt:
-        await update.message.reply_text("Please provide a prompt! Example: `/image sitting on bed`", parse_mode="Markdown")
+        await update.message.reply_text("Kuch prompt toh do! Example: `/image sitting on bed`", parse_mode="Markdown")
         return
         
-    status_msg = await update.message.reply_text("Generating your image... give me a moment! 🎨")
+    status_msg = await update.message.reply_text("Ek sec babes, image generate kar rahi hoon... 🎨")
     
     try:
         image_bytes = await fetch_colab_image(prompt)
-        await update.message.reply_photo(photo=io.BytesIO(image_bytes), caption=f"Here you go, babes: {prompt}")
+        await update.message.reply_photo(photo=io.BytesIO(image_bytes), caption=f"Ye lo babes: {prompt}")
         await status_msg.delete()
     except asyncio.TimeoutError:
-        await status_msg.edit_text("Couldn't process image right now: Request timed out. Make sure your Colab cell is running!")
+        await status_msg.edit_text("Colab server respond nahi kar raha. Check karo active hai ya nahi!")
     except Exception as e:
         print(f"Image Error: {e}")
-        await status_msg.edit_text("Couldn't process image right now. Make sure your Colab server is running and the URL is updated on Render!")
+        await status_msg.edit_text("Colab server offline lag raha hai babes!")
 
 async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
@@ -152,4 +157,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-  
+    
