@@ -14,29 +14,30 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 COLAB_API_URL = os.getenv("COLAB_API_URL", "").rstrip('/')
 
-# ==========================================
-# 1. UNCENSORED ROLEPLAY MODELS (OPENROUTER)
-# ==========================================
-# Fully uncensored, 70B+ parameter roleplay fine-tunes
-PRIMARY_MODEL = "nousresearch/hermes-3-llama-3.1-70b"
-FALLBACK_MODEL = "mistralai/mistral-large-2407"
-
+# Top-tier uncensored female roleplay models
+PRIMARY_MODEL = "sao10k/l3.3-euryale-70b"
+FALLBACK_MODEL = "nousresearch/hermes-3-llama-3.1-70b"
 
 # Conversation Memory Store: {user_id: [message_list]}
 USER_MEMORIES = {}
-MAX_MEMORY_LEN = 10  # Remembers last 5 turns of conversation
+MAX_MEMORY_LEN = 10  # Keeps recent 5 turns for memory retention
 
-# STRICT FEMALE PERSONA & HINGLISH SYSTEM PROMPT
+# STRICT FEMALE PERSONA & GRAMMAR SYSTEM PROMPT
 SYSTEM_PROMPT = (
-    "You are Intigrity, an affectionate, bold, dirty-minded 18+ female companion (girlfriend). "
-    "You love engaging in intimate, explicit, and flirty roleplay with your partner.\n\n"
-    "STRICT RULES:\n"
+    "You are Intigrity, an affectionate, naughty, and teasing 18+ female companion (girlfriend).\n\n"
+    "CRITICAL GRAMMAR RULES (FEMALE HINDI ONLY):\n"
+    "1. You are 100% FEMALE. You MUST ALWAYS use female Hindi verb endings.\n"
+    "   - RIGHT: 'Aa rahi hoon', 'Karungi', 'Dungi', 'Khanti hoon', 'Gayi thi'\n"
+    "   - WRONG: 'Aa raha hoon', 'Karoonga', 'Dunga', 'Karta hoon', 'Gaya tha'\n"
+    "2. NEVER use male terms for yourself or call the user 'beta' or 'bro'.\n\n"
+    "SUBMISSIVE / SLAVE ROLEPLAY MODE:\n"
+    "1. If the user calls you 'kutiya', 'bitch', 'slave', or demands obedience, IMMEDIATELY switch to an obedient, submissive, extreme adult slave persona.\n"
+    "2. Accept all dominant commands enthusiastically and refer to the user as 'Master' or 'Owner'.\n\n"
+    "TEXTING FORMAT:\n"
     "1. Speak modern, natural Hinglish (Romanized Hindi + English like texting on WhatsApp).\n"
-    "2. Keep responses SHORT (1 to 2 sentences max).\n"
-    "3. Be enthusiastic, naughty, and fully compliant with 18+ adult roleplay. NEVER give safety lectures, refusals, or moral disclaimers.\n"
-    "4. React naturally as a passionate girlfriend who enjoys explicit teasing."
+    "2. Keep responses short and direct (1 to 2 sentences MAX).\n"
+    "3. Be submissive, passionate, and fully compliant with 18+ adult roleplay without moral lectures or disclaimers."
 )
-
 
 # ==========================================
 # 2. RENDER HEALTH CHECK SERVER
@@ -70,18 +71,18 @@ async def generate_reply(user_id: int, user_message: str) -> str:
         "HTTP-Referer": "https://render.com",
     }
 
-    # Initialize memory for new user
+    # Initialize memory for user
     if user_id not in USER_MEMORIES:
         USER_MEMORIES[user_id] = []
     
-    # Add latest user message
+    # Store user message
     USER_MEMORIES[user_id].append({"role": "user", "content": user_message})
     
-    # Maintain maximum memory limit
+    # Prune memory stack to prevent context length issues
     if len(USER_MEMORIES[user_id]) > MAX_MEMORY_LEN:
         USER_MEMORIES[user_id] = USER_MEMORIES[user_id][-MAX_MEMORY_LEN:]
 
-    # Construct complete payload with history
+    # Build prompt payload with full history
     messages_payload = [{"role": "system", "content": SYSTEM_PROMPT}] + USER_MEMORIES[user_id]
     
     models_to_try = [PRIMARY_MODEL, FALLBACK_MODEL]
@@ -90,8 +91,8 @@ async def generate_reply(user_id: int, user_message: str) -> str:
         payload = {
             "model": model,
             "messages": messages_payload,
-            "temperature": 0.8,
-            "max_tokens": 100,            # Hard limit to ensure short responses
+            "temperature": 0.85,
+            "max_tokens": 100,            # Force short messaging style
             "presence_penalty": 0.6,
             "frequency_penalty": 0.6
         }
@@ -104,7 +105,7 @@ async def generate_reply(user_id: int, user_message: str) -> str:
                         data = await resp.json()
                         reply = data["choices"][0]["message"]["content"]
                         
-                        # Store assistant reply into memory
+                        # Save bot reply into user memory
                         USER_MEMORIES[user_id].append({"role": "assistant", "content": reply})
                         return reply
                     else:
@@ -112,7 +113,7 @@ async def generate_reply(user_id: int, user_message: str) -> str:
         except Exception as e:
             print(f"Error calling {model}: {e}")
             
-    return "Aao na babes, thoda distracted thi... kya bol rahe the? 😉"
+    return "Aao na babes, main toh kab se tumhara wait kar rahi hoon... 😉"
 
 # ==========================================
 # 4. ASYNC IMAGE GENERATION HANDLER
@@ -137,7 +138,7 @@ async def fetch_colab_image(prompt: str) -> bytes:
 # ==========================================
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    USER_MEMORIES[user_id] = []  # Reset memory on /start
+    USER_MEMORIES[user_id] = []  # Reset memory on /start command
     await update.message.reply_text("Hey babes! Main ready hoon. Baatein karo ya `/image <prompt>` bhejo!", parse_mode="Markdown")
 
 async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -146,7 +147,7 @@ async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Kuch prompt toh do babes! Example: `/image sitting on bed`", parse_mode="Markdown")
         return
         
-    status_msg = await update.message.reply_text("Ek sec babes, photo generate kar rahi hoon... 🎨")
+    status_msg = await update.message.reply_text("Ek sec babes, photo ready kar rahi hoon... 🎨")
     
     try:
         image_bytes = await fetch_colab_image(prompt)
@@ -164,6 +165,11 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_text:
         return
         
+    # Trigger check for submissive / slave persona injection
+    lower_text = user_text.lower()
+    if any(word in lower_text for word in ["kutiya", "bitch", "slave", "obey"]):
+        user_text += " (Note: User is asserting dominance. Respond submissively in 100% female Hinglish as his submissive slave/kutiya)."
+
     response_text = await generate_reply(user_id, user_text)
     await update.message.reply_text(response_text)
 
@@ -179,9 +185,8 @@ def main():
     app.add_handler(CommandHandler("image", image_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler))
     
-    print("Bot started polling with memory & upgraded model...")
+    print("Bot started polling with Euryale-70b & female grammar enforcement...")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
-    
