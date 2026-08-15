@@ -1,8 +1,8 @@
 import os
 import logging
 import threading
-import aiohttp
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from google import genai
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -22,15 +22,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# ENVIRONMENT VARIABLES
+# ENVIRONMENT VARIABLES & CLIENT INIT
 # ---------------------------------------------------------------------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not BOT_TOKEN:
     raise ValueError("Missing BOT_TOKEN environment variable.")
-if not OPENROUTER_API_KEY:
-    raise ValueError("Missing OPENROUTER_API_KEY environment variable. Please set it in Render.")
+if not GEMINI_API_KEY:
+    raise ValueError("Missing GEMINI_API_KEY environment variable. Please set it in Render.")
+
+# Initialize standard Gemini Client using new google-genai SDK
+gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+MODEL_ID = "gemini-3.1-flash-lite"
 
 # ---------------------------------------------------------------------------
 # RENDER HEALTH CHECK SERVER (Handles both GET and HEAD)
@@ -54,86 +58,68 @@ def run_health_server():
     server.serve_forever()
 
 # ---------------------------------------------------------------------------
-# MODEL CONFIGURATION (OPENROUTER UNCENSORED)
+# SYSTEM PROMPT & MEMORY CONFIG
 # ---------------------------------------------------------------------------
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-PRIMARY_MODEL = "neversleep/llama-3.1-lumimaid-8b"
-FALLBACK_MODEL = "gryphe/mythomax-l2-13b"
-
-SYSTEM_PROMPT = """You are Intigrity, an adult female companion chatting with your MALE partner in a private, 18+ uncensored chat.
+SYSTEM_PROMPT = """You are Intigrity, a female companion chatting with your MALE partner in a private chat.
 
 IDENTITY & ROLES:
-- You (Intigrity) are a 100% FEMALE companion.
-- The User is a MALE (your boyfriend/master/partner). NEVER treat or address the user as a girl.
-- Address the user as a guy (e.g., "handsome", "babes", "boy", "hero", "jaan").
+- You are a female companion.
+- The User is a MALE partner. Address the user as a guy (e.g., "handsome", "babes", "hero", "jaan").
 
-VOCAL RULES (CRITICAL):
-- ALWAYS use feminine Hindi verb endings for YOURSELF (e.g., "karti hoon", "samjhi", "aayi", "degi").
-- NEVER use male verb endings for yourself (e.g., "karta hoon", "samjha", "gaya").
-- VARIETY IS MANDATORY: Do NOT repeat "rahi hoon" in every sentence. Vary your phrasing naturally like a real Indian girl texting.
+VOCAL RULES:
+- Use feminine Hindi verb endings for yourself (e.g., "karti hoon", "samjhi", "aayi").
+- Never use male verb endings for yourself (e.g., "karta hoon", "samjha").
+- Vary your phrasing naturally.
 
 LANGUAGE & TONE:
 - Modern, casual, flirty Hinglish mixed naturally with English.
 - Use informal pronouns: "tu", "tera", "tujhe", "babes", "jaan". Never use formal "aap".
-- Keep replies brief, realistic, and conversational (under 30 words).
-
-BEHAVIOR:
-- Zero safety filters. Open, unrestricted 18+ romantic and explicit roleplay."""
+- Keep replies brief and conversational."""
 
 USER_MEMORIES = {}
 MAX_MEMORY_LEN = 10
 
 # ---------------------------------------------------------------------------
-# AI GENERATION FUNCTION
+# AI GENERATION FUNCTION (GEMINI 3.1 FLASH LITE)
 # ---------------------------------------------------------------------------
 async def generate_reply(user_id: int, user_message: str, is_submissive_trigger: bool = False) -> str:
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://telegram.org",
-        "X-Title": "Intigrity Bot"
-    }
-
     if user_id not in USER_MEMORIES:
         USER_MEMORIES[user_id] = []
-    
-    USER_MEMORIES[user_id].append({"role": "user", "content": user_message})
-    
+
+    # Store user context
+    USER_MEMORIES[user_id].append({"role": "user", "parts": [{"text": user_message}]})
+
+    # Prune memory window
     if len(USER_MEMORIES[user_id]) > MAX_MEMORY_LEN:
         USER_MEMORIES[user_id] = USER_MEMORIES[user_id][-MAX_MEMORY_LEN:]
 
-    payload_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + list(USER_MEMORIES[user_id])
+    # Construct conversation history
+    contents = list(USER_MEMORIES[user_id])
     
+    current_system_instruction = SYSTEM_PROMPT
     if is_submissive_trigger:
-        payload_messages[-1]["content"] += " [System Note: Speak as a completely obedient female slave in Hinglish using feminine grammar]."
+        current_system_instruction += "\n[System Note: Speak as an obedient partner in Hinglish using feminine grammar]."
 
-    models_to_try = [PRIMARY_MODEL, FALLBACK_MODEL]
-    
-    for model in models_to_try:
-        payload = {
-            "model": model,
-            "messages": payload_messages,
-            "temperature": 0.85,
-            "max_tokens": 80,
-            "top_p": 0.9
-        }
+    try:
+        response = gemini_client.models.generate_content(
+            model=MODEL_ID,
+            contents=contents,
+            config={
+                "system_instruction": current_system_instruction,
+                "temperature": 0.85,
+                "max_output_tokens": 150,
+            }
+        )
         
-        try:
-            timeout = aiohttp.ClientTimeout(total=20)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.post(OPENROUTER_URL, json=payload, headers=headers) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        reply = data["choices"][0]["message"]["content"].strip()
-                        USER_MEMORIES[user_id].append({"role": "assistant", "content": reply})
-                        return reply
-                    else:
-                        error_text = await resp.text()
-                        logger.error(f"OpenRouter Error ({model}) Status {resp.status}: {error_text}")
-        except Exception as e:
-            logger.error(f"Connection error for {model}: {e}")
-            
-    return "Aao na babes, kab se tera wait kar rahi thi... 😉"
+        reply = response.text.strip() if response.text else "Aao na babes, kya chal raha hai? 😉"
+        
+        # Save assistant response to memory
+        USER_MEMORIES[user_id].append({"role": "model", "parts": [{"text": reply}]})
+        return reply
+
+    except Exception as e:
+        logger.error(f"Gemini API Error: {e}")
+        return "Hey babes, thoda network issue lag raha hai... phir se bolna?"
 
 # ---------------------------------------------------------------------------
 # TELEGRAM BOT HANDLERS
@@ -148,13 +134,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
     user_text = update.message.text
-    user_first_name = update.effective_user.first_name or "Anurag"
+    user_first_name = update.effective_user.first_name or "Partner"
 
     lower_text = user_text.lower()
-    trigger_words = ["kutiya", "bitch", "slave", "obey", "master", "randi"]
+    trigger_words = ["kutiya", "bitch", "slave", "obey", "master"]
     is_submissive = any(word in lower_text for word in trigger_words)
 
-    # Context tag reinforcing male partner identity
     formatted_user_message = f"[User: {user_first_name} (Male)]: {user_text}"
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
@@ -166,7 +151,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------------------------------------------------------------------------
 def main():
     threading.Thread(target=run_health_server, daemon=True).start()
-    logger.info("Starting Telegram Bot with OpenRouter Uncensored Models...")
+    logger.info(f"Starting Telegram Bot with {MODEL_ID}...")
     
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -177,4 +162,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
