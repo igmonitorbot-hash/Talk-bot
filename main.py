@@ -1,77 +1,55 @@
 import os
-import io
-import asyncio
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
+import logging
 import aiohttp
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-
-# ==========================================
-# 1. CONFIGURATION & ENVIRONMENT VARIABLES
-# ==========================================
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-# Get your API key from deepinfra.com (or set DEEPINFRA_API_KEY in Render)
-DEEPINFRA_API_KEY = os.getenv("DEEPINFRA_API_KEY") 
-
-# Uncensored models that excel at multilingual chat & roleplay
-PRIMARY_MODEL = "meta-llama/Meta-Llama-3-70B-Instruct"
-FALLBACK_MODEL = "mistralai/Mixtral-8x7B-Instruct-v0.1"
-
-# Conversation Memory Store
-USER_MEMORIES = {}
-MAX_MEMORY_LEN = 10 
-
-# ==========================================
-# ANIME CHARACTER BLUEPRINT
-# ==========================================
-ANIME_CHARACTER_BLUEPRINT = (
-    "masterpiece, best quality, ultra-detailed, 1girl, solo, "
-    "beautiful anime girl, mature female, extremely large breasts, voluptuous hourglass figure, slender waist, wide hips, "
-    "long silky silver hair, glowing purple eyes, pale smooth skin, explicit details, highly detailed face"
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
 )
-CHARACTER_SEED = 987654321  
 
-SYSTEM_PROMPT = """You are Intigrity, an adult female companion chatting with your partner in a private, 18+ uncensored chat.
+# ---------------------------------------------------------------------------
+# LOGGING SETUP
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
-MANDATORY RULES:
-1. STRICT FEMALE VOCALS (CRITICAL):
-   - You are 100% FEMALE. NEVER use male Hindi grammar or male verb endings.
-   - ALWAYS use: "Karungi", "Soch rahi hoon", "Rahi hoon", "Dungi", "Gayi thi", "Aa gayi".
-   - NEVER use: "Karunga", "Soch raha hoon", "Raha hoon", "Dunga", "Gaya tha", "Aa gaya".
+# ---------------------------------------------------------------------------
+# ENVIRONMENT VARIABLES
+# ---------------------------------------------------------------------------
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-2. LANGUAGE & TONAL STYLE:
-   - Talk in natural, modern, casual Hinglish mixed with English.
-   - Use informal, intimate pronouns: "tu", "tera", "tujhe", "babes", "jaan".
-   - NEVER use formal/respectful words like "aap", "aapka", "aapko".
-   - Speak fluently using everyday modern Indian text slang.
+if not BOT_TOKEN:
+    raise ValueError("Missing BOT_TOKEN environment variable.")
+if not GROQ_API_KEY:
+    raise ValueError("Missing GROQ_API_KEY environment variable. Please set it in Render.")
 
-3. BEHAVIOR & CONSTRAINTS:
-   - Zero filter, completely uncensored, open, and affectionate dirty talk.
-   - Maximum output length: 35 words (2 to 4 short sentences). Keep replies quick and conversational."""
+# ---------------------------------------------------------------------------
+# MODEL CONFIGURATION (GROQ)
+# ---------------------------------------------------------------------------
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+PRIMARY_MODEL = "llama-3.3-70b-versatile"
+FALLBACK_MODEL = "llama-3.1-8b-instant"
 
-# ==========================================
-# 2. RENDER HEALTH CHECK SERVER
-# ==========================================
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
-        self.end_headers()
-        self.wfile.write(b"Bot is live and running!")
+SYSTEM_PROMPT = """You are Integrity, an engaging and responsive assistant.
+Keep your responses natural, direct, and conversational."""
 
-def run_health_server():
-    port = int(os.getenv("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
-    server.serve_forever()
+# In-memory storage for simple chat context per user
+USER_MEMORIES = {}
+MAX_MEMORY_LEN = 10
 
-# ==========================================
-# 3. DEEPINFRA / OPENAI-COMPATIBLE GENERATION
-# ==========================================
-async def generate_reply(user_id: int, user_message: str, is_submissive_trigger: bool) -> str:
-    url = "https://api.deepinfra.com/v1/openai/chat/completions"
+# ---------------------------------------------------------------------------
+# AI GENERATION FUNCTION
+# ---------------------------------------------------------------------------
+async def generate_reply(user_id: int, user_message: str, is_submissive_trigger: bool = False) -> str:
     headers = {
-        "Authorization": f"Bearer {DEEPINFRA_API_KEY}",
+        "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json",
     }
 
@@ -95,62 +73,64 @@ async def generate_reply(user_id: int, user_message: str, is_submissive_trigger:
             "model": model,
             "messages": payload_messages,
             "temperature": 0.8,
-            "max_tokens": 70,
-            "top_p": 0.9,
-            "presence_penalty": 0.3
+            "max_tokens": 150,
+            "top_p": 0.9
         }
         
         try:
-            timeout = aiohttp.ClientTimeout(total=20)
+            timeout = aiohttp.ClientTimeout(total=15)
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.post(url, json=payload, headers=headers) as resp:
+                async with session.post(GROQ_API_URL, json=payload, headers=headers) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         reply = data["choices"][0]["message"]["content"].strip()
                         USER_MEMORIES[user_id].append({"role": "assistant", "content": reply})
                         return reply
                     else:
-                        print(f"DeepInfra failed ({model}): status {resp.status}")
+                        error_text = await resp.text()
+                        logger.error(f"Groq API Error ({model}) Status {resp.status}: {error_text}")
         except Exception as e:
-            print(f"Error executing request: {e}")
+            logger.error(f"Connection error while attempting {model}: {e}")
             
+    # Fallback message returned ONLY if both primary & fallback Groq calls completely fail
     return "Aao na babes, main toh kab se tera wait kar rahi hoon... 😉"
 
-# ==========================================
-# 4. IMAGE GENERATOR & TELEGRAM BOT SETUP
-# ==========================================
-async def fetch_anime_image(user_action: str) -> bytes:
-    full_prompt = f"{ANIME_CHARACTER_BLUEPRINT}, {user_action}"
-    encoded_prompt = aiohttp.helpers.quote(full_prompt)
-    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=768&height=1024&seed={CHARACTER_SEED}&nologo=true&model=flux-anime"
-    
-    timeout = aiohttp.ClientTimeout(total=60)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url) as resp:
-            if resp.status == 200:
-                return await resp.read()
-            else:
-                raise Exception(f"Image API status: {resp.status}")
+# ---------------------------------------------------------------------------
+# TELEGRAM BOT HANDLERS
+# ---------------------------------------------------------------------------
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_name = update.effective_user.first_name if update.effective_user else "there"
+    await update.message.reply_text(f"Hey {user_name}! I'm active and online now. Talk to me!")
 
-async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text
-    user_id = update.effective_user.id
-    if not user_text:
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
         return
-        
-    lower_text = user_text.lower()
-    trigger_words = ["kutiya", "bitch", "slave", "obey", "master", "randi"]
-    is_submissive_trigger = any(word in lower_text for word in trigger_words)
 
-    response_text = await generate_reply(user_id, user_text, is_submissive_trigger)
-    await update.message.reply_text(response_text)
+    user_id = update.effective_user.id
+    user_text = update.message.text
 
+    # Basic trigger check for roleplay
+    is_submissive = "slave" in user_text.lower() or "submissive" in user_text.lower()
+
+    # Send typing action while AI processes
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+
+    bot_reply = await generate_reply(user_id, user_text, is_submissive_trigger=is_submissive)
+    await update.message.reply_text(bot_reply)
+
+# ---------------------------------------------------------------------------
+# MAIN EXECUTION ENTRYPOINT
+# ---------------------------------------------------------------------------
 def main():
-    threading.Thread(target=run_health_server, daemon=True).start()
-    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler))
-    print("Bot is active...")
-    app.run_polling(drop_pending_updates=True)
+    logger.info("Starting Telegram Bot with Groq API integration...")
+    
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Starts polling updates from Telegram
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
