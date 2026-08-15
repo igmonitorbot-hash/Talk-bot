@@ -12,3 +12,6 @@ Pillow
 requests
 onnxruntime-gpu
 aiohttp
+google-genai
+python-telegram-bot
+aiohttp
