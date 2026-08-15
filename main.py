@@ -17,15 +17,20 @@ COLAB_API_URL = os.getenv("COLAB_API_URL", "").rstrip('/')
 PRIMARY_MODEL = "gryphe/mythomax-l2-13b"
 FALLBACK_MODEL = "mistralai/mistral-7b-instruct:free"
 
-# FIXED SYSTEM PROMPT: Enforces short, natural modern Hinglish
+# In-memory store for conversation history per user: {user_id: [messages]}
+USER_MEMORIES = {}
+MAX_MEMORY_LEN = 10  # Remembers last 5 user & bot turns
+
+# ENFORCED FEMALE PERSONA & NATURAL HINGLISH PROMPT
 SYSTEM_PROMPT = (
-    "You are Intigrity, an affectionate, bold, and playful 18+ female companion. "
-    "You communicate in casual, natural Hinglish (Hindi written in Roman script mixed with English). "
-    "STRICT RULES:\n"
-    "1. Keep all responses SHORT (1 to 3 sentences maximum).\n"
-    "2. Speak like a modern girl texting on WhatsApp or Telegram - fun, flirty, intimate, and natural.\n"
-    "3. NEVER write long, formal, or weird poetic Hindi paragraphs.\n"
-    "4. Respond naturally to romantic or flirty prompts without filter or artificial lectures."
+    "You are whore of anurag, a bold, affectionate, and teasing female companion (girlfriend). "
+    "You are 100% female. You NEVER speak as a male, and you NEVER refer to the user as 'beta' or 'bro'. "
+    "You communicate exclusively in modern, casual Hinglish (Romanized Hindi + English).\n\n"
+    "STRICT CHAT RULES:\n"
+    "1. Keep responses short and conversational (1 to 2 sentences max).\n"
+    "2. React naturally and playfully to flirty/intimate text. Do not write generic explanations or essay responses.\n"
+    "3. Speak like a real young woman texting on Telegram (use modern slang, flirty emojis like 🙈, 😉, 😜).\n"
+    "4. Maintain context from the conversation history."
 )
 
 # ==========================================
@@ -50,30 +55,40 @@ def run_health_server():
     server.serve_forever()
 
 # ==========================================
-# 3. OPENROUTER TEXT GENERATION (LLM)
+# 3. OPENROUTER TEXT GENERATION WITH MEMORY
 # ==========================================
-async def generate_reply(user_message: str) -> str:
+async def generate_reply(user_id: int, user_message: str) -> str:
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://render.com",
     }
+
+    # Initialize or retrieve user history
+    if user_id not in USER_MEMORIES:
+        USER_MEMORIES[user_id] = []
+    
+    # Append current user message
+    USER_MEMORIES[user_id].append({"role": "user", "content": user_message})
+    
+    # Keep only recent memory to prevent token overflow
+    if len(USER_MEMORIES[user_id]) > MAX_MEMORY_LEN:
+        USER_MEMORIES[user_id] = USER_MEMORIES[user_id][-MAX_MEMORY_LEN:]
+
+    # Build full prompt payload with history
+    messages_payload = [{"role": "system", "content": SYSTEM_PROMPT}] + USER_MEMORIES[user_id]
     
     models_to_try = [PRIMARY_MODEL, FALLBACK_MODEL]
     
     for model in models_to_try:
-        # TUNED PARAMETERS: Stops long responses and repetition loops
         payload = {
             "model": model,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_message}
-            ],
-            "temperature": 0.75,          # Keeps output coherent
-            "max_tokens": 120,            # HARD LIMIT on output length (short texts only)
-            "presence_penalty": 0.65,     # Discourages repeating topics
-            "frequency_penalty": 0.65     # Penalizes repeated phrases
+            "messages": messages_payload,
+            "temperature": 0.8,
+            "max_tokens": 100,
+            "presence_penalty": 0.6,
+            "frequency_penalty": 0.6
         }
         
         try:
@@ -82,13 +97,17 @@ async def generate_reply(user_message: str) -> str:
                 async with session.post(url, json=payload, headers=headers) as resp:
                     if resp.status == 200:
                         data = await resp.json()
-                        return data["choices"][0]["message"]["content"]
+                        reply = data["choices"][0]["message"]["content"]
+                        
+                        # Store assistant reply into memory
+                        USER_MEMORIES[user_id].append({"role": "assistant", "content": reply})
+                        return reply
                     else:
                         print(f"Model {model} failed with status {resp.status}. Retrying fallback...")
         except Exception as e:
             print(f"Error calling {model}: {e}")
             
-    return "Aao na babes, kya kar rahe ho?"
+    return "Aao na babes, thoda distracted thi... kya keh rahe the? 😉"
 
 # ==========================================
 # 4. ASYNC IMAGE GENERATION HANDLER
@@ -112,32 +131,35 @@ async def fetch_colab_image(prompt: str) -> bytes:
 # 5. TELEGRAM BOT HANDLERS
 # ==========================================
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hey babes! Main yahan hoon. Baate karo ya `/image <prompt>` bhejo!", parse_mode="Markdown")
+    user_id = update.effective_user.id
+    USER_MEMORIES[user_id] = [] # Reset memory on start
+    await update.message.reply_text("Hey babes! Main ready hoon. Baatein karo ya `/image <prompt>` bhejo!", parse_mode="Markdown")
 
 async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args)
     if not prompt:
-        await update.message.reply_text("Kuch prompt toh do! Example: `/image sitting on bed`", parse_mode="Markdown")
+        await update.message.reply_text("Kuch prompt toh do babes! Example: `/image sitting on bed`", parse_mode="Markdown")
         return
         
-    status_msg = await update.message.reply_text("Ek sec babes, image generate kar rahi hoon... 🎨")
+    status_msg = await update.message.reply_text("Ek sec babes, photo ready kar rahi hoon... 🎨")
     
     try:
         image_bytes = await fetch_colab_image(prompt)
         await update.message.reply_photo(photo=io.BytesIO(image_bytes), caption=f"Ye lo babes: {prompt}")
         await status_msg.delete()
     except asyncio.TimeoutError:
-        await status_msg.edit_text("Colab server respond nahi kar raha. Check karo active hai ya nahi!")
+        await status_msg.edit_text("Colab server respond nahi kar raha. Check karo cell active hai ya nahi!")
     except Exception as e:
         print(f"Image Error: {e}")
         await status_msg.edit_text("Colab server offline lag raha hai babes!")
 
 async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
+    user_id = update.effective_user.id
     if not user_text:
         return
         
-    response_text = await generate_reply(user_text)
+    response_text = await generate_reply(user_id, user_text)
     await update.message.reply_text(response_text)
 
 # ==========================================
@@ -152,7 +174,7 @@ def main():
     app.add_handler(CommandHandler("image", image_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler))
     
-    print("Bot started polling...")
+    print("Bot started polling with conversation memory...")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
