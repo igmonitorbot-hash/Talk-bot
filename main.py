@@ -14,23 +14,23 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 COLAB_API_URL = os.getenv("COLAB_API_URL", "").rstrip('/')
 
-PRIMARY_MODEL = "gryphe/mythomax-l2-13b"
-FALLBACK_MODEL = "mistralai/mistral-7b-instruct:free"
+# High-quality uncensored models with natural Hinglish fluency
+PRIMARY_MODEL = "meta-llama/llama-3.3-70b-instruct"
+FALLBACK_MODEL = "nousresearch/hermes-3-llama-3.1-405b"
 
-# In-memory store for conversation history per user: {user_id: [messages]}
+# Conversation Memory Store: {user_id: [message_list]}
 USER_MEMORIES = {}
-MAX_MEMORY_LEN = 10  # Remembers last 5 user & bot turns
+MAX_MEMORY_LEN = 10  # Remembers last 5 turns of conversation
 
-# ENFORCED FEMALE PERSONA & NATURAL HINGLISH PROMPT
+# STRICT FEMALE PERSONA & HINGLISH SYSTEM PROMPT
 SYSTEM_PROMPT = (
-    "You are whore of anurag, a bold, affectionate, and teasing female companion (girlfriend). "
-    "You are 100% female. You NEVER speak as a male, and you NEVER refer to the user as 'beta' or 'bro'. "
-    "You communicate exclusively in modern, casual Hinglish (Romanized Hindi + English).\n\n"
-    "STRICT CHAT RULES:\n"
-    "1. Keep responses short and conversational (1 to 2 sentences max).\n"
-    "2. React naturally and playfully to flirty/intimate text. Do not write generic explanations or essay responses.\n"
-    "3. Speak like a real young woman texting on Telegram (use modern slang, flirty emojis like 🙈, 😉, 😜).\n"
-    "4. Maintain context from the conversation history."
+    "You are babe, a bold, highly attractive, and affectionate 18+ female companion (girlfriend). "
+    "You are 100% female. You NEVER use words like 'beta' or 'bro', and NEVER talk like a guy.\n\n"
+    "STRICT TEXTING RULES:\n"
+    "1. Speak natural, modern Hinglish (Romanized Hindi mixed with English like texting on WhatsApp/Telegram).\n"
+    "2. Keep responses short and realistic (1 to 2 sentences MAX).\n"
+    "3. Be flirty, intimate, and tease naturally in 18+ roleplay without giving robotic descriptions or educational lectures.\n"
+    "4. Always pay attention to the ongoing conversation context."
 )
 
 # ==========================================
@@ -65,18 +65,18 @@ async def generate_reply(user_id: int, user_message: str) -> str:
         "HTTP-Referer": "https://render.com",
     }
 
-    # Initialize or retrieve user history
+    # Initialize memory for new user
     if user_id not in USER_MEMORIES:
         USER_MEMORIES[user_id] = []
     
-    # Append current user message
+    # Add latest user message
     USER_MEMORIES[user_id].append({"role": "user", "content": user_message})
     
-    # Keep only recent memory to prevent token overflow
+    # Maintain maximum memory limit
     if len(USER_MEMORIES[user_id]) > MAX_MEMORY_LEN:
         USER_MEMORIES[user_id] = USER_MEMORIES[user_id][-MAX_MEMORY_LEN:]
 
-    # Build full prompt payload with history
+    # Construct complete payload with history
     messages_payload = [{"role": "system", "content": SYSTEM_PROMPT}] + USER_MEMORIES[user_id]
     
     models_to_try = [PRIMARY_MODEL, FALLBACK_MODEL]
@@ -86,7 +86,7 @@ async def generate_reply(user_id: int, user_message: str) -> str:
             "model": model,
             "messages": messages_payload,
             "temperature": 0.8,
-            "max_tokens": 100,
+            "max_tokens": 100,            # Hard limit to ensure short responses
             "presence_penalty": 0.6,
             "frequency_penalty": 0.6
         }
@@ -103,11 +103,11 @@ async def generate_reply(user_id: int, user_message: str) -> str:
                         USER_MEMORIES[user_id].append({"role": "assistant", "content": reply})
                         return reply
                     else:
-                        print(f"Model {model} failed with status {resp.status}. Retrying fallback...")
+                        print(f"Model {model} failed with status {resp.status}. Trying fallback...")
         except Exception as e:
             print(f"Error calling {model}: {e}")
             
-    return "Aao na babes, thoda distracted thi... kya keh rahe the? 😉"
+    return "Aao na babes, thoda distracted thi... kya bol rahe the? 😉"
 
 # ==========================================
 # 4. ASYNC IMAGE GENERATION HANDLER
@@ -132,7 +132,7 @@ async def fetch_colab_image(prompt: str) -> bytes:
 # ==========================================
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    USER_MEMORIES[user_id] = [] # Reset memory on start
+    USER_MEMORIES[user_id] = []  # Reset memory on /start
     await update.message.reply_text("Hey babes! Main ready hoon. Baatein karo ya `/image <prompt>` bhejo!", parse_mode="Markdown")
 
 async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -141,7 +141,7 @@ async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Kuch prompt toh do babes! Example: `/image sitting on bed`", parse_mode="Markdown")
         return
         
-    status_msg = await update.message.reply_text("Ek sec babes, photo ready kar rahi hoon... 🎨")
+    status_msg = await update.message.reply_text("Ek sec babes, photo generate kar rahi hoon... 🎨")
     
     try:
         image_bytes = await fetch_colab_image(prompt)
@@ -174,7 +174,7 @@ def main():
     app.add_handler(CommandHandler("image", image_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler))
     
-    print("Bot started polling with conversation memory...")
+    print("Bot started polling with memory & upgraded model...")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
