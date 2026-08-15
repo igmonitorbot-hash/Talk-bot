@@ -13,9 +13,9 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# Optimized Models for Multilingual Fluency & Uncensored Roleplay
-PRIMARY_MODEL = "meta-llama/llama-3.3-70b-instruct"
-FALLBACK_MODEL = "neversleep/llama-3.1-lumimaid-8b"
+# Replace standard Llama 3.3 Instruct with uncensored roleplay models
+PRIMARY_MODEL = "neversleep/llama-3.1-lumimaid-8b"
+FALLBACK_MODEL = "cognitivecomputations/dolphin-mistral-24b-venice-edition"
 
 # Conversation Memory Store
 USER_MEMORIES = {}
