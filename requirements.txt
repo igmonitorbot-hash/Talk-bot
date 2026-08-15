@@ -1,2 +1,13 @@
 python-telegram-bot
 openai
+python-dotenv
+fastapi
+uvicorn
+pyngrok
+nest-asyncio
+insightface
+gdown
+opencv-python
+Pillow
+requests
+onnxruntime-gpu
