@@ -14,9 +14,9 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 COLAB_API_URL = os.getenv("COLAB_API_URL", "").rstrip('/')
 
-PRIMARY_MODEL = "sao10k/l3.3-euryale-70b"
-FALLBACK_MODEL = "sao10k/l3.1-euryale-70b"
-
+# Updated model configuration for better roleplay consistency and fewer blocks 
+PRIMARY_MODEL = "neversleep/llama-3-lumimaid-70b" 
+FALLBACK_MODEL = "sao10k/l3.3-euryale-70b"
 # Conversation Memory Store: {user_id: [message_list]}
 USER_MEMORIES = {}
 MAX_MEMORY_LEN = 10  # Remembers last 5 turns
