@@ -135,24 +135,25 @@ async def generate_reply(user_id: int, user_message: str, is_submissive_trigger:
 # ---------------------------------------------------------------------------
 # TELEGRAM BOT HANDLERS
 # ---------------------------------------------------------------------------
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_name = update.effective_user.first_name if update.effective_user else "babes"
-    await update.message.reply_text(f"Hey {user_name}! Aagayi main... bata kya chal raha hai? 😉")
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
 
     user_id = update.effective_user.id
     user_text = update.message.text
+    user_first_name = update.effective_user.first_name or "Anurag"
 
     lower_text = user_text.lower()
     trigger_words = ["kutiya", "bitch", "slave", "obey", "master", "randi"]
     is_submissive = any(word in lower_text for word in trigger_words)
 
+    # Contextual note instructing the bot that the sender is a male user
+    formatted_user_message = f"[User: {user_first_name} (Male)]: {user_text}"
+
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    bot_reply = await generate_reply(user_id, user_text, is_submissive_trigger=is_submissive)
+    bot_reply = await generate_reply(user_id, formatted_user_message, is_submissive_trigger=is_submissive)
     await update.message.reply_text(bot_reply)
+    
 
 # ---------------------------------------------------------------------------
 # MAIN EXECUTION ENTRYPOINT
