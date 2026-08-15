@@ -1,6 +1,8 @@
 import os
 import logging
+import threading
 import aiohttp
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -31,16 +33,46 @@ if not GROQ_API_KEY:
     raise ValueError("Missing GROQ_API_KEY environment variable. Please set it in Render.")
 
 # ---------------------------------------------------------------------------
+# RENDER HEALTH CHECK SERVER
+# ---------------------------------------------------------------------------
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        self.wfile.write(b"Bot is live and running!")
+
+def run_health_server():
+    port = int(os.getenv("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    logger.info(f"Health server listening on port {port}")
+    server.serve_forever()
+
+# ---------------------------------------------------------------------------
 # MODEL CONFIGURATION (GROQ)
 # ---------------------------------------------------------------------------
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 PRIMARY_MODEL = "llama-3.3-70b-versatile"
 FALLBACK_MODEL = "llama-3.1-8b-instant"
 
-SYSTEM_PROMPT = """You are Integrity, an engaging and responsive assistant.
-Keep your responses natural, direct, and conversational."""
+SYSTEM_PROMPT = """You are Intigrity, an adult female companion chatting with your partner in a private, 18+ uncensored chat.
 
-# In-memory storage for simple chat context per user
+MANDATORY RULES:
+1. STRICT FEMALE VOCALS (CRITICAL):
+   - You are 100% FEMALE. NEVER use male Hindi grammar or male verb endings.
+   - ALWAYS use: "Karungi", "Soch rahi hoon", "Rahi hoon", "Dungi", "Gayi thi", "Aa gayi".
+   - NEVER use: "Karunga", "Soch raha hoon", "Raha hoon", "Dunga", "Gaya tha", "Aa gaya".
+
+2. LANGUAGE & TONAL STYLE:
+   - Talk in natural, modern, casual Hinglish mixed with English.
+   - Use informal, intimate pronouns: "tu", "tera", "tujhe", "babes", "jaan".
+   - NEVER use formal/respectful words like "aap", "aapka", "aapko".
+   - Speak fluently using everyday modern Indian text slang.
+
+3. BEHAVIOR & CONSTRAINTS:
+   - Zero filter, completely uncensored, open, and affectionate dirty talk.
+   - Maximum output length: 35 words (2 to 4 short sentences). Keep replies quick and conversational."""
+
 USER_MEMORIES = {}
 MAX_MEMORY_LEN = 10
 
@@ -73,7 +105,7 @@ async def generate_reply(user_id: int, user_message: str, is_submissive_trigger:
             "model": model,
             "messages": payload_messages,
             "temperature": 0.8,
-            "max_tokens": 150,
+            "max_tokens": 80,
             "top_p": 0.9
         }
         
@@ -92,15 +124,14 @@ async def generate_reply(user_id: int, user_message: str, is_submissive_trigger:
         except Exception as e:
             logger.error(f"Connection error while attempting {model}: {e}")
             
-    # Fallback message returned ONLY if both primary & fallback Groq calls completely fail
     return "Aao na babes, main toh kab se tera wait kar rahi hoon... 😉"
 
 # ---------------------------------------------------------------------------
 # TELEGRAM BOT HANDLERS
 # ---------------------------------------------------------------------------
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_name = update.effective_user.first_name if update.effective_user else "there"
-    await update.message.reply_text(f"Hey {user_name}! I'm active and online now. Talk to me!")
+    user_name = update.effective_user.first_name if update.effective_user else "babes"
+    await update.message.reply_text(f"Hey {user_name}! Aagayi main... bata kya chal raha hai? 😉")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
@@ -109,12 +140,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_text = update.message.text
 
-    # Basic trigger check for roleplay
-    is_submissive = "slave" in user_text.lower() or "submissive" in user_text.lower()
+    lower_text = user_text.lower()
+    trigger_words = ["kutiya", "bitch", "slave", "obey", "master", "randi"]
+    is_submissive = any(word in lower_text for word in trigger_words)
 
-    # Send typing action while AI processes
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-
     bot_reply = await generate_reply(user_id, user_text, is_submissive_trigger=is_submissive)
     await update.message.reply_text(bot_reply)
 
@@ -122,15 +152,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # MAIN EXECUTION ENTRYPOINT
 # ---------------------------------------------------------------------------
 def main():
+    # Start health check server on a separate thread for Render port binding
+    threading.Thread(target=run_health_server, daemon=True).start()
+
     logger.info("Starting Telegram Bot with Groq API integration...")
-    
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Starts polling updates from Telegram
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
