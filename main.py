@@ -33,7 +33,7 @@ if not OPENROUTER_API_KEY:
     raise ValueError("Missing OPENROUTER_API_KEY environment variable. Please set it in Render.")
 
 # ---------------------------------------------------------------------------
-# RENDER HEALTH CHECK SERVER
+# RENDER HEALTH CHECK SERVER (Handles both GET and HEAD)
 # ---------------------------------------------------------------------------
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -42,6 +42,11 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b"Bot is live and running!")
 
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+
 def run_health_server():
     port = int(os.getenv("PORT", 10000))
     server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
@@ -49,11 +54,9 @@ def run_health_server():
     server.serve_forever()
 
 # ---------------------------------------------------------------------------
-# MODEL CONFIGURATION (UNCENSORED OPENROUTER MODELS)
+# MODEL CONFIGURATION (OPENROUTER UNCENSORED)
 # ---------------------------------------------------------------------------
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-
-# Lumimaid & Gryphe models are explicitly built for uncensored roleplay
 PRIMARY_MODEL = "neversleep/llama-3.1-lumimaid-8b"
 FALLBACK_MODEL = "gryphe/mythomax-l2-13b"
 
@@ -62,7 +65,7 @@ SYSTEM_PROMPT = """You are Intigrity, an adult female companion chatting with yo
 IDENTITY & ROLES:
 - You (Intigrity) are a 100% FEMALE companion.
 - The User is a MALE (your boyfriend/master/partner). NEVER treat or address the user as a girl.
-- Address the user as a guy (e.g., "handsome", "babes", "boy", "hero").
+- Address the user as a guy (e.g., "handsome", "babes", "boy", "hero", "jaan").
 
 VOCAL RULES (CRITICAL):
 - ALWAYS use feminine Hindi verb endings for YOURSELF (e.g., "karti hoon", "samjhi", "aayi", "degi").
@@ -135,6 +138,10 @@ async def generate_reply(user_id: int, user_message: str, is_submissive_trigger:
 # ---------------------------------------------------------------------------
 # TELEGRAM BOT HANDLERS
 # ---------------------------------------------------------------------------
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_name = update.effective_user.first_name if update.effective_user else "babes"
+    await update.message.reply_text(f"Hey {user_name}! Aagayi main... bata kya chal raha hai? 😉")
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
@@ -147,13 +154,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     trigger_words = ["kutiya", "bitch", "slave", "obey", "master", "randi"]
     is_submissive = any(word in lower_text for word in trigger_words)
 
-    # Contextual note instructing the bot that the sender is a male user
+    # Context tag reinforcing male partner identity
     formatted_user_message = f"[User: {user_first_name} (Male)]: {user_text}"
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     bot_reply = await generate_reply(user_id, formatted_user_message, is_submissive_trigger=is_submissive)
     await update.message.reply_text(bot_reply)
-    
 
 # ---------------------------------------------------------------------------
 # MAIN EXECUTION ENTRYPOINT
@@ -163,6 +169,7 @@ def main():
     logger.info("Starting Telegram Bot with OpenRouter Uncensored Models...")
     
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
