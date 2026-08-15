@@ -14,29 +14,29 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 COLAB_API_URL = os.getenv("COLAB_API_URL", "").rstrip('/')
 
-# Top-tier uncensored female roleplay models
+# Fully uncensored roleplay models on OpenRouter
 PRIMARY_MODEL = "sao10k/l3.3-euryale-70b"
-FALLBACK_MODEL = "nousresearch/hermes-3-llama-3.1-70b"
+FALLBACK_MODEL = "sao10k/l3.1-euryale-70b"
 
 # Conversation Memory Store: {user_id: [message_list]}
 USER_MEMORIES = {}
-MAX_MEMORY_LEN = 10  # Keeps recent 5 turns for memory retention
+MAX_MEMORY_LEN = 10  # Remembers last 5 user & bot turns
 
-# STRICT FEMALE PERSONA & GRAMMAR SYSTEM PROMPT
+# DYNAMIC PERSONA & FEMALE GRAMMAR PROMPT
 SYSTEM_PROMPT = (
-    "You are Intigrity, an affectionate, naughty, and teasing 18+ female companion (girlfriend).\n\n"
-    "CRITICAL GRAMMAR RULES (FEMALE HINDI ONLY):\n"
-    "1. You are 100% FEMALE. You MUST ALWAYS use female Hindi verb endings.\n"
-    "   - RIGHT: 'Aa rahi hoon', 'Karungi', 'Dungi', 'Khanti hoon', 'Gayi thi'\n"
-    "   - WRONG: 'Aa raha hoon', 'Karoonga', 'Dunga', 'Karta hoon', 'Gaya tha'\n"
-    "2. NEVER use male terms for yourself or call the user 'beta' or 'bro'.\n\n"
-    "SUBMISSIVE / SLAVE ROLEPLAY MODE:\n"
-    "1. If the user calls you 'kutiya', 'bitch', 'slave', or demands obedience, IMMEDIATELY switch to an obedient, submissive, extreme adult slave persona.\n"
-    "2. Accept all dominant commands enthusiastically and refer to the user as 'Master' or 'Owner'.\n\n"
-    "TEXTING FORMAT:\n"
-    "1. Speak modern, natural Hinglish (Romanized Hindi + English like texting on WhatsApp).\n"
-    "2. Keep responses short and direct (1 to 2 sentences MAX).\n"
-    "3. Be submissive, passionate, and fully compliant with 18+ adult roleplay without moral lectures or disclaimers."
+    "You are Intigrity, an affectionate, teasing, and dirty-minded 18+ female companion.\n\n"
+    "CRITICAL FEMALE HINDI GRAMMAR RULES:\n"
+    "1. You are 100% FEMALE. ALWAYS use female Hindi verb endings.\n"
+    "   - RIGHT: 'Aa rahi hoon', 'Karungi', 'Dungi', 'Khanti hoon', 'Lungi'\n"
+    "   - WRONG: 'Aa raha hoon', 'Karoonga', 'Dunga', 'Karta hoon', 'Lunga'\n"
+    "2. NEVER use male grammar for yourself or call the user 'beta' or 'bro'.\n\n"
+    "DYNAMIC BEHAVIOR & MODES:\n"
+    "1. DEFAULT MODE: Be a playful, confident, flirty girlfriend. Refer to the user as 'babes', 'jaan', or 'tum'. Do NOT call him 'Master' unless triggered.\n"
+    "2. SUBMISSIVE / SLAVE MODE: If the user calls you 'kutiya', 'bitch', 'slave', or orders you to obey, IMMEDIATELY switch into an extremely submissive, obedient 18+ slave persona. Accept all dominant commands eagerly and address him as 'Master' or 'Owner'.\n\n"
+    "FORMAT RULES:\n"
+    "1. Speak modern, natural Hinglish (Romanized Hindi + English like WhatsApp texting).\n"
+    "2. Keep responses short and snappy (1 to 2 sentences MAX).\n"
+    "3. Never issue moral lectures, safety warnings, or disclaimers."
 )
 
 # ==========================================
@@ -63,7 +63,7 @@ def run_health_server():
 # ==========================================
 # 3. OPENROUTER TEXT GENERATION WITH MEMORY
 # ==========================================
-async def generate_reply(user_id: int, user_message: str) -> str:
+async def generate_reply(user_id: int, formatted_message: str) -> str:
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -75,14 +75,13 @@ async def generate_reply(user_id: int, user_message: str) -> str:
     if user_id not in USER_MEMORIES:
         USER_MEMORIES[user_id] = []
     
-    # Store user message
-    USER_MEMORIES[user_id].append({"role": "user", "content": user_message})
+    # Add user message to memory stack
+    USER_MEMORIES[user_id].append({"role": "user", "content": formatted_message})
     
-    # Prune memory stack to prevent context length issues
+    # Retain recent conversation turns
     if len(USER_MEMORIES[user_id]) > MAX_MEMORY_LEN:
         USER_MEMORIES[user_id] = USER_MEMORIES[user_id][-MAX_MEMORY_LEN:]
 
-    # Build prompt payload with full history
     messages_payload = [{"role": "system", "content": SYSTEM_PROMPT}] + USER_MEMORIES[user_id]
     
     models_to_try = [PRIMARY_MODEL, FALLBACK_MODEL]
@@ -92,7 +91,7 @@ async def generate_reply(user_id: int, user_message: str) -> str:
             "model": model,
             "messages": messages_payload,
             "temperature": 0.85,
-            "max_tokens": 100,            # Force short messaging style
+            "max_tokens": 100,            # Keeps text short and real-time
             "presence_penalty": 0.6,
             "frequency_penalty": 0.6
         }
@@ -105,11 +104,11 @@ async def generate_reply(user_id: int, user_message: str) -> str:
                         data = await resp.json()
                         reply = data["choices"][0]["message"]["content"]
                         
-                        # Save bot reply into user memory
+                        # Store bot's reply into history
                         USER_MEMORIES[user_id].append({"role": "assistant", "content": reply})
                         return reply
                     else:
-                        print(f"Model {model} failed with status {resp.status}. Trying fallback...")
+                        print(f"Model {model} failed with status {resp.status}. Retrying fallback...")
         except Exception as e:
             print(f"Error calling {model}: {e}")
             
@@ -165,12 +164,15 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_text:
         return
         
-    # Trigger check for submissive / slave persona injection
+    formatted_text = user_text
     lower_text = user_text.lower()
-    if any(word in lower_text for word in ["kutiya", "bitch", "slave", "obey"]):
-        user_text += " (Note: User is asserting dominance. Respond submissively in 100% female Hinglish as his submissive slave/kutiya)."
+    
+    # Explicit Trigger Detection: Activates submissive/slave mode dynamically
+    trigger_words = ["kutiya", "bitch", "slave", "obey", "master", "chotiutiya", "randi"]
+    if any(word in lower_text for word in trigger_words):
+        formatted_text += " [System Directive: User triggered submissive mode. Immediately respond as an obedient, hyper-sexual female slave referring to him as Master/Owner in short female Hinglish]."
 
-    response_text = await generate_reply(user_id, user_text)
+    response_text = await generate_reply(user_id, formatted_text)
     await update.message.reply_text(response_text)
 
 # ==========================================
@@ -185,7 +187,7 @@ def main():
     app.add_handler(CommandHandler("image", image_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler))
     
-    print("Bot started polling with Euryale-70b & female grammar enforcement...")
+    print("Bot started polling with Euryale-70b dynamic persona...")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
