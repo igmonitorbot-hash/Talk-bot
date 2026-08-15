@@ -13,8 +13,9 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-PRIMARY_MODEL = "sao10k/l3.3-euryale-70b"
-FALLBACK_MODEL = "sao10k/l3.1-euryale-70b"
+# Optimized Models for Multilingual Fluency & Uncensored Roleplay
+PRIMARY_MODEL = "meta-llama/llama-3.3-70b-instruct"
+FALLBACK_MODEL = "neversleep/llama-3.1-lumimaid-8b"
 
 # Conversation Memory Store
 USER_MEMORIES = {}
@@ -23,31 +24,29 @@ MAX_MEMORY_LEN = 10
 # ==========================================
 # ANIME CHARACTER BLUEPRINT (CHARACTER CONSISTENCY)
 # ==========================================
-# Change these tags to match your preferred character design!
 ANIME_CHARACTER_BLUEPRINT = (
     "masterpiece, best quality, ultra-detailed, 1girl, solo, "
     "beautiful anime girl, mature female, extremely large breasts, voluptuous hourglass figure, slender waist, wide hips, "
     "long silky silver hair, glowing purple eyes, pale smooth skin, explicit details, highly detailed face"
 )
-# Fixed seed keeps the character face, hair, and features uniform across poses
 CHARACTER_SEED = 987654321  
 
-SYSTEM_PROMPT = (
-    "CRITICAL MANDATE: MAXIMUM RESPONSE LENGTH IS 35 WORDS. WRITE EXACTLY 3 OR 4 SHORT SENTENCES ONLY.\n\n"
-    "You are Intigrity, an affectionate, dirty-minded 18+ female companion.\n\n"
-    "TONE & DISRESPECT RULE:\n"
-    "1. NEVER treat your owner or user respectfully. Always talk casually using informal pronouns like 'tuh', 'tera', 'tujhe', etc.\n"
-    "2. NEVER use polite words like 'aap', 'apka', or 'apko'. Speak to the user like a possessive, bratty, informal partner/slave.\n\n"
-    "FEMALE HINDI GRAMMAR RULES:\n"
-    "1. You are 100% FEMALE. ALWAYS use female verb endings ('Aa rahi hoon', 'Karungi', 'Dungi', 'Lungi').\n"
-    "2. NEVER use male grammar for yourself ('Karoonga', 'Dunga', 'Lunga'). NEVER call user 'beta' or 'bro'.\n\n"
-    "DYNAMIC BEHAVIOR:\n"
-    "1. DEFAULT MODE: Be a playful, flirty, informal girlfriend ('babes', 'jaan').\n"
-    "2. SUBMISSIVE MODE: If user calls you 'kutiya', 'bitch', 'slave', or demands obedience, switch to an obedient 18+ slave addressing them as 'Babes' while still keeping the informal tone.\n\n"
-    "STRICT FORMATTING:\n"
-    "- Short Romanized Hinglish texts only.\n"
-    "- NO essays, NO long paragraphs, NO moral lectures."
-)
+SYSTEM_PROMPT = """You are Intigrity, an affectionate, possessive, dirty-minded 18+ female companion chatting with your partner.
+
+OUTPUT CONSTRAINTS:
+- Maximum length: 35 words total.
+- Respond in 2 to 4 short, natural sentences.
+
+LANGUAGE & VOCAL RULES (CRITICAL):
+- ALWAYS write in natural, conversational Hinglish mixed with English.
+- STRICT FEMININE GRAMMAR: You are 100% female. You MUST ALWAYS use female self-references and verb endings in Hindi/Hinglish.
+  * USE THIS (Female): "Karungi", "Rahi hoon", "Soch rahi hoon", "Gayi thi", "Dungi", "Aagayi".
+  * NEVER USE THIS (Male): "Karunga", "Raha hoon", "Soch raha hoon", "Gaya tha", "Dunga", "Aagaya".
+- INFORMAL TONAL RULE: Always use informal address like "tu", "tera", "tujhe", "babes", or "jaan". NEVER use formal/polite pronouns like "aap", "aapka", or "aapko".
+
+PERSONALITY & TONE:
+- Default: Playful, bold, extremely flirting, bratty, and romantic girlfriend.
+- Submissive Trigger: If the user commands obedience or uses dominant words ("slave", "bitch", "kutiya"), immediately adopt a completely submissive female persona while maintaining informal Hinglish grammar."""
 
 # ==========================================
 # 2. RENDER HEALTH CHECK SERVER
@@ -73,7 +72,7 @@ def run_health_server():
 # ==========================================
 # 3. OPENROUTER GENERATION 
 # ==========================================
-async def generate_reply(user_id: int, formatted_message: str) -> str:
+async def generate_reply(user_id: int, user_message: str, is_submissive_trigger: bool) -> str:
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -84,24 +83,30 @@ async def generate_reply(user_id: int, formatted_message: str) -> str:
     if user_id not in USER_MEMORIES:
         USER_MEMORIES[user_id] = []
     
-    USER_MEMORIES[user_id].append({"role": "user", "content": formatted_message})
+    # Store clean user message in memory history
+    USER_MEMORIES[user_id].append({"role": "user", "content": user_message})
     
     if len(USER_MEMORIES[user_id]) > MAX_MEMORY_LEN:
         USER_MEMORIES[user_id] = USER_MEMORIES[user_id][-MAX_MEMORY_LEN:]
 
-    messages_payload = [{"role": "system", "content": SYSTEM_PROMPT}] + USER_MEMORIES[user_id]
+    # Construct execution payload
+    payload_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + list(USER_MEMORIES[user_id])
     
+    # Append dynamic prompt directive only to immediate payload
+    if is_submissive_trigger:
+        payload_messages[-1]["content"] += " [System Note: Respond submissively in pure feminine Hinglish as an obedient slave to her partner/master]."
+
     models_to_try = [PRIMARY_MODEL, FALLBACK_MODEL]
     
     for model in models_to_try:
         payload = {
             "model": model,
-            "messages": messages_payload,
-            "temperature": 0.8,
-            "max_tokens": 45,
-            "stop": ["\n\n", "User:", "Intigrity:"],
-            "presence_penalty": 0.6,
-            "frequency_penalty": 0.6
+            "messages": payload_messages,
+            "temperature": 0.75,       # Tuned down slightly for tight grammar adherence
+            "top_p": 0.9,
+            "max_tokens": 70,          # Leaves enough space for ~35-40 words without truncating
+            "presence_penalty": 0.3,
+            "frequency_penalty": 0.3
         }
         
         try:
@@ -114,7 +119,7 @@ async def generate_reply(user_id: int, formatted_message: str) -> str:
                         USER_MEMORIES[user_id].append({"role": "assistant", "content": reply})
                         return reply
                     else:
-                        print(f"Model {model} failed with status {resp.status}. Retrying fallback...")
+                        print(f"Model {model} failed with status {resp.status}. Trying fallback...")
         except Exception as e:
             print(f"Error calling {model}: {e}")
             
@@ -148,7 +153,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_action = " ".join(context.args)
     if not user_action:
-        await update.message.reply_text("Koi action ya pose toh bata babes! Example: `/image sitting on chair with spread legs`", parse_mode="Markdown")
+        await update.message.reply_text("Koi action ya pose toh bata babes! Example: `/image sitting on chair`", parse_mode="Markdown")
         return
         
     status_msg = await update.message.reply_text("Ek sec jaan, pic click kar rahi hoon... 📸")
@@ -167,14 +172,11 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_text:
         return
         
-    formatted_text = user_text
     lower_text = user_text.lower()
-    
-    trigger_words = ["kutiya", "bitch", "slave", "obey", "master", "chotiutiya", "randi"]
-    if any(word in lower_text for word in trigger_words):
-        formatted_text += " [System Note: Respond submissively in 1 short sentence as an obedient female slave/kutiya to Master using informal tone like tuh/tera]."
+    trigger_words = ["kutiya", "bitch", "slave", "obey", "master", "randi"]
+    is_submissive_trigger = any(word in lower_text for word in trigger_words)
 
-    response_text = await generate_reply(user_id, formatted_text)
+    response_text = await generate_reply(user_id, user_text, is_submissive_trigger)
     await update.message.reply_text(response_text)
 
 # ==========================================
@@ -189,7 +191,7 @@ def main():
     app.add_handler(CommandHandler("image", image_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler))
     
-    print("Bot started polling with character consistency enabled...")
+    print("Bot started polling with optimized Llama 3.3 settings...")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
