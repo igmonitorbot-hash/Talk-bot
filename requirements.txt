@@ -11,3 +11,4 @@ opencv-python
 Pillow
 requests
 onnxruntime-gpu
+aiohttp
