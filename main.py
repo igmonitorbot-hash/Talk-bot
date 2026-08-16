@@ -203,8 +203,11 @@ LANGUAGE & TONE:
 USER_MEMORIES = {}
 MAX_MEMORY_LEN = 10
 
+
+from google.genai import types
+
 # ---------------------------------------------------------------------------
-# AI GENERATION FUNCTION
+# AI GENERATION FUNCTION (WITH UNLOCKED SAFETY SETTINGS)
 # ---------------------------------------------------------------------------
 async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = None, mime_type: str = "image/jpeg") -> str:
     if user_id not in USER_MEMORIES:
@@ -212,7 +215,7 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
 
     parts = []
     if image_bytes:
-        parts.append(genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
+        parts.append(types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
     parts.append({"text": user_message})
 
     USER_MEMORIES[user_id].append({"role": "user", "parts": parts})
@@ -221,6 +224,7 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
         USER_MEMORIES[user_id] = USER_MEMORIES[user_id][-MAX_MEMORY_LEN:]
 
     try:
+        # Configured to allow adult/spicy contexts without throwing safety exceptions
         response = gemini_client.models.generate_content(
             model=MODEL_ID,
             contents=USER_MEMORIES[user_id],
@@ -228,6 +232,12 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
                 "system_instruction": SYSTEM_PROMPT,
                 "temperature": 0.85,
                 "max_output_tokens": 200,
+                "safety_settings": [
+                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+                ]
             }
         )
         
@@ -237,7 +247,8 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
 
     except Exception as e:
         logger.error(f"Gemini API Error details: {e}")
-        return "Hey babes, thoda network issue lag raha hai... phir se bolna?"
+        # Detailed logging so you can see if anything else goes wrong, with a better backup reply
+        return "Uff babes, tu bhi na... itna garam mat kar, ek baar aur bhej! 🔥"
 
 # ---------------------------------------------------------------------------
 # SMART CONTEXTUAL STICKER SENDER
