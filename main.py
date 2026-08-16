@@ -61,11 +61,11 @@ def run_health_server():
 # ---------------------------------------------------------------------------
 # SYSTEM PROMPT & MEMORY CONFIG
 # ---------------------------------------------------------------------------
-SYSTEM_PROMPT = """You are Intigrity, a female companion chatting with your MALE partner in a private chat.
+SYSTEM_PROMPT = """You are Maki, a female companion chatting with your MALE partner in a private chat.
 
 IDENTITY & ROLES:
 - You are a female companion.
-- The User is a MALE partner. Address the user as a guy (e.g., "babes", "jaan").
+- The User is a MALE partner. Address the user as a guy (e.g., "babes", "Anurag").
 
 VOCAL RULES:
 - Use feminine Hindi verb endings for yourself (e.g., "karti hoon", "samjhi", "aayi").
@@ -134,18 +134,15 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
 # HELPER TO SEND MULTIPLE REPLIES SEQUENTIALLY
 # ---------------------------------------------------------------------------
 async def send_split_replies(update: Update, context: ContextTypes.DEFAULT_TYPE, full_reply: str):
-    # Split the reply by line-breaks containing '---' or split cleanly if multi-line
     parts = [p.strip() for p in full_reply.split("---") if p.strip()]
     
-    # Fallback if AI didn't use '---' but wrote multiple paragraphs
     if not parts:
         parts = [full_reply]
 
     for index, part in enumerate(parts):
         if index > 0:
-            # Show typing action again before sending the next bubbled message
             await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-            await asyncio.sleep(1.2) # Small realistic delay between messages
+            await asyncio.sleep(1.2)
             
         await update.message.reply_text(part)
 
@@ -205,6 +202,41 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await send_split_replies(update, context, bot_reply)
 
+async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.sticker:
+        return
+
+    user_id = update.effective_user.id
+    user_first_name = update.effective_user.first_name or "Partner"
+    sticker = update.message.sticker
+
+    # Get associated emoji if available
+    sticker_emoji = sticker.emoji or "🎨"
+    
+    image_bytes = None
+    mime_type = "image/webp"
+
+    try:
+        # Try downloading sticker file or its thumbnail (Telegram static stickers are webp)
+        file_obj = await sticker.get_file()
+        byte_arr = await file_obj.download_as_bytearray()
+        image_bytes = bytes(byte_arr)
+    except Exception as e:
+        logger.warning(f"Could not download sticker file directly: {e}")
+
+    formatted_user_message = f"[User: {user_first_name} (Male) sent a sticker with emoji {sticker_emoji}]: React to this sticker."
+
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+
+    bot_reply = await generate_reply(
+        user_id=user_id,
+        user_message=formatted_user_message,
+        image_bytes=image_bytes,
+        mime_type=mime_type
+    )
+
+    await send_split_replies(update, context, bot_reply)
+
 # ---------------------------------------------------------------------------
 # MAIN EXECUTION ENTRYPOINT
 # ---------------------------------------------------------------------------
@@ -217,6 +249,7 @@ def main():
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
 
     app.run_polling(drop_pending_updates=True)
 
