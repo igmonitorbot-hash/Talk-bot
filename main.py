@@ -106,17 +106,29 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
         response = gemini_client.models.generate_content(
             model=MODEL_ID,
             contents=USER_MEMORIES[user_id],
-            config={
-                "system_instruction": SYSTEM_PROMPT,
-                "temperature": 0.85,
-                "max_output_tokens": 200,
-                "safety_settings": [
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                temperature=0.85,
+                max_output_tokens=200,
+                safety_settings=[
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                    ),
                 ]
-            }
+            )
         )
         
         reply = response.text.strip() if response.text else "Aao na babes, kya chal raha hai? 😉"
@@ -125,10 +137,10 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
 
     except Exception as e:
         logger.error(f"Gemini API Error details: {e}")
-        return "Uff babes, tu bhi na... itna garam mat kar, ek baar aur bhej! 🔥"
+        return f"Uff babes, API error aa gaya: {e}"
 
 # ---------------------------------------------------------------------------
-# TELEGRAM HANDLERS (TEXT, PHOTO, & STICKERS - NO RANDOM STICKER REPLIES)
+# TELEGRAM HANDLERS (TEXT, PHOTO, & STICKERS - NO RANDOM STICKER SENDER)
 # ---------------------------------------------------------------------------
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Hey! Aagayi main... bata kya chal raha hai? 😉")
@@ -224,4 +236,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-        
+    
