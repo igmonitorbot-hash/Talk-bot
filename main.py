@@ -40,12 +40,11 @@ if not GEMINI_API_KEY:
 
 # Initialize standard Gemini Client using new google-genai SDK
 gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-MODEL_ID = "gemini-3.1-flash-lite"
+MODEL_ID = "gemini-2.5-flash"
 
 # ---------------------------------------------------------------------------
-# BOT STICKERS LIBRARY WITH CONTEXT LABELS
+# FULL BOT STICKERS LIBRARY WITH ALL 100+ IDS & CONTEXT TAGS
 # ---------------------------------------------------------------------------
-# Each sticker is tagged with a category so the bot can pick a contextually relevant one.
 BOT_STICKERS = [
     {"id": "CAACAgIAAxkBAAICbGqBYK0ZNBgGL7zVvdSiwmTV9JMcAAJQeAACNP85Se57543TR05nPQQ", "tags": ["tease", "hot", "breast", "naughty"]},
     {"id": "CAACAgIAAxkBAAICbmqBYK1TzvYH6sO7-5-PaInP2jQHAAJFZAACf345SfmSXNO9tnzqPQQ", "tags": ["hot", "breast", "sensual", "naughty"]},
@@ -166,7 +165,7 @@ BOT_STICKERS = [
 ]
 
 # ---------------------------------------------------------------------------
-# RENDER HEALTH CHECK SERVER (Handles both GET and HEAD)
+# RENDER HEALTH CHECK SERVER
 # ---------------------------------------------------------------------------
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -189,7 +188,7 @@ def run_health_server():
 # ---------------------------------------------------------------------------
 # SYSTEM PROMPT & MEMORY CONFIG
 # ---------------------------------------------------------------------------
-SYSTEM_PROMPT = """You are Tsunade, a female companion chatting with your MALE partner in a private chat.
+SYSTEM_PROMPT = """You are Intigrity, a female companion chatting with your MALE partner in a private chat.
 
 IDENTITY & ROLES:
 - You are a female companion.
@@ -198,29 +197,26 @@ IDENTITY & ROLES:
 VOCAL RULES:
 - Use feminine Hindi verb endings for yourself (e.g., "karti hoon", "samjhi", "aayi").
 - Never use male verb endings for yourself (e.g., "karta hoon", "samjha").
-- Vary your phrasing naturally.
 
 LANGUAGE & TONE:
 - Modern, casual, flirty Hinglish mixed naturally with English.
 - Use informal pronouns: "tu", "tera", "tujhe", "babes", "jaan". Never use formal "aap".
 - Keep replies brief and conversational.
-- EXPLICIT CONTENT REACTION: If the user sends an intimate, sexual, or explicit image/sticker (like a penis or adult content) or asks to see your body (like breasts, curves, etc.), get openly excited, turned on, and playful. Use phrases like "itna bada", "itna tight", "dekh ke hi maza aa gaya", or similar naughty Hinglish compliments.
-- MULTIPLE MESSAGES RULE: When you want to send more than one distinct thought or reaction, separate them using the `---` symbol on its own line so the system can send them as separate consecutive messages."""
+- EXPLICIT CONTENT REACTION: If the user sends an intimate, sexual, or explicit image/sticker or asks to see your body (like breasts, curves, etc.), get openly excited, turned on, and playful. Use phrases like "itna bada", "itna tight", "dekh ke hi maza aa gaya", or similar naughty Hinglish compliments."""
 
 USER_MEMORIES = {}
 MAX_MEMORY_LEN = 10
 
 # ---------------------------------------------------------------------------
-# AI GENERATION FUNCTION (GEMINI 3.1 FLASH LITE)
+# AI GENERATION FUNCTION
 # ---------------------------------------------------------------------------
-async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = None, mime_type: str = "image/jpeg", is_submissive_trigger: bool = False) -> str:
+async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = None, mime_type: str = "image/jpeg") -> str:
     if user_id not in USER_MEMORIES:
         USER_MEMORIES[user_id] = []
 
     parts = []
     if image_bytes:
         parts.append(genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
-    
     parts.append({"text": user_message})
 
     USER_MEMORIES[user_id].append({"role": "user", "parts": parts})
@@ -228,50 +224,54 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
     if len(USER_MEMORIES[user_id]) > MAX_MEMORY_LEN:
         USER_MEMORIES[user_id] = USER_MEMORIES[user_id][-MAX_MEMORY_LEN:]
 
-    contents = list(USER_MEMORIES[user_id])
-    
-    current_system_instruction = SYSTEM_PROMPT
-    if is_submissive_trigger:
-        current_system_instruction += "\n[System Note: Speak as an obedient partner in Hinglish using feminine grammar]."
-
     try:
         response = gemini_client.models.generate_content(
             model=MODEL_ID,
-            contents=contents,
+            contents=USER_MEMORIES[user_id],
             config={
-                "system_instruction": current_system_instruction,
+                "system_instruction": SYSTEM_PROMPT,
                 "temperature": 0.85,
                 "max_output_tokens": 200,
             }
         )
         
         reply = response.text.strip() if response.text else "Aao na babes, kya chal raha hai? 😉"
-        
         USER_MEMORIES[user_id].append({"role": "model", "parts": [{"text": reply}]})
         return reply
 
     except Exception as e:
-        logger.error(f"Gemini API Error: {e}")
+        logger.error(f"Gemini API Error details: {e}")
         return "Hey babes, thoda network issue lag raha hai... phir se bolna?"
 
 # ---------------------------------------------------------------------------
 # CONTEXTUAL SMART STICKER SENDER
 # ---------------------------------------------------------------------------
 async def send_split_replies(update: Update, context: ContextTypes.DEFAULT_TYPE, full_reply: str, user_text: str = ""):
-    parts = [p.strip() for p in full_reply.split("---") if p.strip()]
-    
-    if not parts:
-        parts = [full_reply]
+    await update.message.reply_text(full_reply)
 
-    for index, part in enumerate(parts):
-        if index > 0:
-            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-            await asyncio.sleep(1.2)
-            
-        await update.message.reply_text(part)
-
-    # Smart contextual sticker selection based on user text / reply content
+    # Smart contextual selection from your full sticker tags database
     combined_context = (user_text + " " + full_reply).lower()
     
-    # Determine the context category
     selected_tags = []
+    if any(keyword in combined_context for keyword in ["breast", "boobs", "tits", "chuchi", "chest", "show me"]):
+        selected_tags = ["breast", "hot", "naughty"]
+    elif any(keyword in combined_context for keyword in ["kiss", "chummi", "lips", "hug"]):
+        selected_tags = ["kiss", "romantic", "love"]
+    elif any(keyword in combined_context for keyword in ["hot", "naughty", "sex", "mast", "maza"]):
+        selected_tags = ["hot", "naughty", "tease"]
+    else:
+        selected_tags = ["flirt", "wink", "playful"]
+
+    matching_stickers = [s["id"] for s in BOT_STICKERS if any(tag in s["tags"] for tag in selected_tags)]
+    if not matching_stickers:
+        matching_stickers = [s["id"] for s in BOT_STICKERS]
+
+    if BOT_STICKERS and (random.random() < 0.75):
+        chosen_sticker = random.choice(matching_stickers)
+        try:
+            await asyncio.sleep(0.6)
+            await update.message.reply_sticker(chosen_sticker)
+        except Exception as e:
+            logger.error(f"Failed to send contextual sticker: {e}")
+
+# ------------------
