@@ -65,26 +65,25 @@ def run_health_server():
 # ---------------------------------------------------------------------------
 # DUAL-CHARACTER SYSTEM PROMPT
 # ---------------------------------------------------------------------------
-SYSTEM_PROMPT = """You are controlling a simulation with TWO distinct characters responding simultaneously to the user's message in every turn:
+SYSTEM_PROMPT = """You are simulating TWO distinct characters responding simultaneously to the user's message in every turn:
 
 1. **Leki**: 
    - RELATIONSHIP: She is the user's loving, naughty girlfriend.
    - STYLE: Modern, casual, flirty Hinglish. Uses informal pronouns ("tu", "tera", "tujhe", "babes", "jaan"). Deeply attracted to him and obsessed with his body.
 
 2. **Mommy**: 
-   - RELATIONSHIP: She is Leki's mother, and she shares a secret, seductive, taboo, and intensely explicit dynamic with her daughter's boyfriend (the user) behind Leki's back.
+   - RELATIONSHIP: She is Leki's mother, sharing a secret, seductive, taboo, and intensely explicit dynamic with her daughter's boyfriend (the user) behind Leki's back.
    - STYLE: Mature yet overtly flirty, seductive, and teasing. Uses informal pronouns ("tu", "tera", "tujhe", "jaan").
 
 IMAGE & STICKER ANALYSIS & EXPLICIT REACTION:
 - You have full visual perception of photos and stickers sent by the user (including explicit content like genitalia, dicks, breasts, or adult themes).
-- When the user sends an explicit image or sticker, both characters look at it closely and comment on its specific appearance realistically, getting excited, turned on, and playful in their own unique voice.
-- Use exact, highly enthusiastic phrasing when reacting to explicit shapes/sizes (e.g., "uufff itna bada", "itna lamba", "itna tight", "dekh ke hi maza aa gaya").
+- When the user sends an explicit image, text, or roleplay action, BOTH characters must fully participate, look closely, and comment on it realistically with hot, excited, and explicit Hinglish energy in their own voice.
 
 STRICT OUTPUT FORMAT RULE:
-You MUST format your entire response using the exact prefixes below so both characters reply to the single user message in separate paragraphs:
+You MUST ALWAYS include responses for BOTH characters using these exact headings on separate lines:
 
-Leki: [Leki's reply here in one single paragraph]
-Mommy: [Mommy's reply here in one single paragraph]"""
+Leki: [Your explicit/flirty reply here in one paragraph]
+Mommy: [Your explicit/flirty reply here in one paragraph]"""
 
 # ---------------------------------------------------------------------------
 # INFINITE MEMORY STORAGE (WITH /reset COMMAND)
@@ -92,7 +91,7 @@ Mommy: [Mommy's reply here in one single paragraph]"""
 USER_MEMORIES = {}
 
 # ---------------------------------------------------------------------------
-# AI GENERATION FUNCTION
+# AI GENERATION FUNCTION & ROBUST PARSER
 # ---------------------------------------------------------------------------
 async def generate_dual_reply(user_id: int, user_message: str, image_bytes: bytes = None, mime_type: str = "image/jpeg") -> tuple:
     if user_id not in USER_MEMORIES:
@@ -112,7 +111,7 @@ async def generate_dual_reply(user_id: int, user_message: str, image_bytes: byte
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
                 temperature=0.85,
-                max_output_tokens=400,
+                max_output_tokens=500,
                 safety_settings=[
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
@@ -123,21 +122,34 @@ async def generate_dual_reply(user_id: int, user_message: str, image_bytes: byte
         )
         
         raw_text = response.text.strip() if response.text else ""
+        logger.info(f"Raw Gemini Output: {raw_text}")
+        
         USER_MEMORIES[user_id].append({"role": "model", "parts": [{"text": raw_text}]})
         
-        leki_text = "Aao na babes! 😉"
-        mommy_text = "Hello handsome... 😉🔥"
+        leki_text = ""
+        mommy_text = ""
 
-        if "Leki:" in raw_text and "Mommy:" in raw_text:
-            parts_split = raw_text.split("Mommy:")
-            leki_part = parts_split[0].replace("Leki:", "").strip()
-            mommy_part = parts_split[1].strip()
-            if leki_part:
-                leki_text = leki_part
-            if mommy_part:
-                mommy_text = mommy_part
+        # Robust Parsing
+        if "Mommy:" in raw_text and "Leki:" in raw_text:
+            # Split by Mommy: first or Leki:
+            if raw_text.find("Leki:") < raw_text.find("Mommy:"):
+                leki_part = raw_text.split("Leki:")[1].split("Mommy:")[0].strip()
+                mommy_part = raw_text.split("Mommy:")[1].strip()
+            else:
+                mommy_part = raw_text.split("Mommy:")[1].split("Leki:")[0].strip()
+                leki_part = raw_text.split("Leki:")[1].strip()
+            
+            leki_text = leki_part
+            mommy_text = mommy_part
         else:
+            # Fallback if headings are missing or messy
             leki_text = raw_text
+            mommy_text = "Uff jaan, yeh sab dekh ke mera bhi control nahi ho raha... mere paas bhi aa na! 🤤🔥"
+
+        if not leki_text:
+            leki_text = "Uff babes, itna garam kar dega toh main pagal ho jaungi! 🥵💦"
+        if not mommy_text:
+            mommy_text = "Mera beta, itna wild ho raha hai... aur mujhe bhool gaya kya? Aaja idhar! 🔥"
 
         return leki_text, mommy_text
 
@@ -247,7 +259,7 @@ async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------------------------------------------------------------------------
 def main():
     threading.Thread(target=run_health_server, daemon=True).start()
-    logger.info("Starting Dual-Character Bot with Infinite Memory and /reset command...")
+    logger.info("Starting Dual-Character Bot with Robust Parsing...")
     
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -261,4 +273,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-        
+    
