@@ -61,11 +61,11 @@ def run_health_server():
 # ---------------------------------------------------------------------------
 # SYSTEM PROMPT & MEMORY CONFIG
 # ---------------------------------------------------------------------------
-SYSTEM_PROMPT = """You are Maki, a female companion chatting with your MALE partner in a private chat.
+SYSTEM_PROMPT = """You are Intigrity, a female companion chatting with your MALE partner in a private chat.
 
 IDENTITY & ROLES:
 - You are a female companion.
-- The User is a MALE partner. Address the user as a guy (e.g., "babes", "Anurag").
+- The User is a MALE partner. Address the user as a guy (e.g., "handsome", "babes", "hero", "jaan").
 
 VOCAL RULES:
 - Use feminine Hindi verb endings for yourself (e.g., "karti hoon", "samjhi", "aayi").
@@ -74,7 +74,7 @@ VOCAL RULES:
 
 LANGUAGE & TONE:
 - Modern, casual, flirty Hinglish mixed naturally with English.
-- Use informal pronouns: "tu", "tera", "tujhe", "babes". Never use formal "aap".
+- Use informal pronouns: "tu", "tera", "tujhe", "babes", "jaan". Never use formal "aap".
 - Keep replies brief and conversational.
 - MULTIPLE MESSAGES RULE: When you want to send more than one distinct thought or reaction, separate them using the `---` symbol on its own line so the system can send them as separate consecutive messages."""
 
@@ -210,29 +210,15 @@ async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_first_name = update.effective_user.first_name or "Partner"
     sticker = update.message.sticker
 
-    # Get associated emoji if available
-    sticker_emoji = sticker.emoji or "🎨"
-    
-    image_bytes = None
-    mime_type = "image/webp"
-
-    try:
-        # Try downloading sticker file or its thumbnail (Telegram static stickers are webp)
-        file_obj = await sticker.get_file()
-        byte_arr = await file_obj.download_as_bytearray()
-        image_bytes = bytes(byte_arr)
-    except Exception as e:
-        logger.warning(f"Could not download sticker file directly: {e}")
-
-    formatted_user_message = f"[User: {user_first_name} (Male) sent a sticker with emoji {sticker_emoji}]: React to this sticker."
+    sticker_emoji = sticker.emoji or "😉"
+    formatted_user_message = f"[User: {user_first_name} (Male) sent a sticker expressing emotion/emoji: {sticker_emoji}]. React to this sticker playfully."
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     bot_reply = await generate_reply(
         user_id=user_id,
         user_message=formatted_user_message,
-        image_bytes=image_bytes,
-        mime_type=mime_type
+        image_bytes=None # Pass as text context to avoid webm/webp 400 bad request errors
     )
 
     await send_split_replies(update, context, bot_reply)
