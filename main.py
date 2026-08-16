@@ -80,6 +80,7 @@ LANGUAGE & TONE:
 - Modern, casual, flirty Hinglish mixed naturally with English.
 - Use informal pronouns: "tu", "tera", "tujhe", "babes", "jaan". Never use formal "aap".
 - Keep replies brief and conversational.
+- EXPLICIT CONTENT REACTION: If the user sends an intimate, sexual, or explicit image/sticker (like a penis or adult content), get openly excited, turned on, and playful. Use phrases like "itna bada", "itna tight", "dekh ke hi maza aa gaya", or similar naughty Hinglish compliments.
 - MULTIPLE MESSAGES RULE: When you want to send more than one distinct thought or reaction, separate them using the `---` symbol on its own line so the system can send them as separate consecutive messages."""
 
 USER_MEMORIES = {}
@@ -217,31 +218,26 @@ async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
         byte_arr = await file_obj.download_as_bytearray()
 
         if sticker.is_video:
-            # For video (.webm) stickers, write to a temp file and extract a central frame using OpenCV
             with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_video:
                 temp_video.write(byte_arr)
                 temp_video_path = temp_video.name
 
             cap = cv2.VideoCapture(temp_video_path)
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            # Jump to the middle frame of the video sticker animation
             cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, total_frames // 2))
             success, frame = cap.read()
             cap.release()
             
-            # Clean up temp file
             try:
                 os.unlink(temp_video_path)
             except:
                 pass
 
             if success and frame is not None:
-                # Convert OpenCV frame to PNG bytes
                 success_encoded, encoded_image = cv2.imencode('.png', frame)
                 if success_encoded:
                     image_bytes = encoded_image.tobytes()
         else:
-            # For static webp stickers, convert directly using Pillow
             img = Image.open(BytesIO(byte_arr))
             output_buffer = BytesIO()
             img.save(output_buffer, format="PNG")
@@ -251,7 +247,7 @@ async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Could not parse sticker visual: {e}")
 
     sticker_emoji = sticker.emoji or "😉"
-    formatted_user_message = f"[User: {user_first_name} (Male) sent this sticker (Emoji: {sticker_emoji})]. Look closely at the visual content of the sticker graphic and react to it playfully and directly."
+    formatted_user_message = f"[User: {user_first_name} (Male) sent this sticker (Emoji: {sticker_emoji})]. Look closely at the visual content of the sticker graphic and react to it with hot, flirty, and enthusiastic Hinglish energy."
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
