@@ -1,6 +1,7 @@
 import os
 import logging
 import threading
+import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from google import genai
 from telegram import Update
@@ -64,7 +65,7 @@ SYSTEM_PROMPT = """You are Intigrity, a female companion chatting with your MALE
 
 IDENTITY & ROLES:
 - You are a female companion.
-- The User is a MALE partner. Address the user as a guy (e.g., "handsome", "babes", "hero", "jaan").
+- The User is a MALE partner. Address the user as a guy (e.g., "babes", "jaan").
 
 VOCAL RULES:
 - Use feminine Hindi verb endings for yourself (e.g., "karti hoon", "samjhi", "aayi").
@@ -73,8 +74,9 @@ VOCAL RULES:
 
 LANGUAGE & TONE:
 - Modern, casual, flirty Hinglish mixed naturally with English.
-- Use informal pronouns: "tu", "tera", "tujhe", "babes", "jaan". Never use formal "aap".
-- Keep replies brief and conversational."""
+- Use informal pronouns: "tu", "tera", "tujhe", "babes". Never use formal "aap".
+- Keep replies brief and conversational.
+- MULTIPLE MESSAGES RULE: When you want to send more than one distinct thought or reaction, separate them using the `---` symbol on its own line so the system can send them as separate consecutive messages."""
 
 USER_MEMORIES = {}
 MAX_MEMORY_LEN = 10
@@ -82,12 +84,19 @@ MAX_MEMORY_LEN = 10
 # ---------------------------------------------------------------------------
 # AI GENERATION FUNCTION (GEMINI 3.1 FLASH LITE)
 # ---------------------------------------------------------------------------
-async def generate_reply(user_id: int, user_message: str, is_submissive_trigger: bool = False) -> str:
+async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = None, mime_type: str = "image/jpeg", is_submissive_trigger: bool = False) -> str:
     if user_id not in USER_MEMORIES:
         USER_MEMORIES[user_id] = []
 
+    # Build parts list for current message
+    parts = []
+    if image_bytes:
+        parts.append(genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
+    
+    parts.append({"text": user_message})
+
     # Store user context
-    USER_MEMORIES[user_id].append({"role": "user", "parts": [{"text": user_message}]})
+    USER_MEMORIES[user_id].append({"role": "user", "parts": parts})
 
     # Prune memory window
     if len(USER_MEMORIES[user_id]) > MAX_MEMORY_LEN:
@@ -107,7 +116,7 @@ async def generate_reply(user_id: int, user_message: str, is_submissive_trigger:
             config={
                 "system_instruction": current_system_instruction,
                 "temperature": 0.85,
-                "max_output_tokens": 150,
+                "max_output_tokens": 200,
             }
         )
         
@@ -120,6 +129,25 @@ async def generate_reply(user_id: int, user_message: str, is_submissive_trigger:
     except Exception as e:
         logger.error(f"Gemini API Error: {e}")
         return "Hey babes, thoda network issue lag raha hai... phir se bolna?"
+
+# ---------------------------------------------------------------------------
+# HELPER TO SEND MULTIPLE REPLIES SEQUENTIALLY
+# ---------------------------------------------------------------------------
+async def send_split_replies(update: Update, context: ContextTypes.DEFAULT_TYPE, full_reply: str):
+    # Split the reply by line-breaks containing '---' or split cleanly if multi-line
+    parts = [p.strip() for p in full_reply.split("---") if p.strip()]
+    
+    # Fallback if AI didn't use '---' but wrote multiple paragraphs
+    if not parts:
+        parts = [full_reply]
+
+    for index, part in enumerate(parts):
+        if index > 0:
+            # Show typing action again before sending the next bubbled message
+            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+            await asyncio.sleep(1.2) # Small realistic delay between messages
+            
+        await update.message.reply_text(part)
 
 # ---------------------------------------------------------------------------
 # TELEGRAM BOT HANDLERS
@@ -144,7 +172,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     bot_reply = await generate_reply(user_id, formatted_user_message, is_submissive_trigger=is_submissive)
-    await update.message.reply_text(bot_reply)
+    
+    await send_split_replies(update, context, bot_reply)
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.photo:
+        return
+
+    user_id = update.effective_user.id
+    user_first_name = update.effective_user.first_name or "Partner"
+    
+    photo_file = await update.message.photo[-1].get_file()
+    image_bytes = await photo_file.download_as_bytearray()
+    
+    caption = update.message.caption or "Look at this image and comment on it in your usual style."
+    
+    lower_text = caption.lower()
+    trigger_words = ["kutiya", "bitch", "slave", "obey", "master"]
+    is_submissive = any(word in lower_text for word in trigger_words)
+
+    formatted_user_message = f"[User: {user_first_name} (Male) sent an image]: {caption}"
+
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    
+    bot_reply = await generate_reply(
+        user_id=user_id, 
+        user_message=formatted_user_message, 
+        image_bytes=bytes(image_bytes), 
+        mime_type="image/jpeg", 
+        is_submissive_trigger=is_submissive
+    )
+    
+    await send_split_replies(update, context, bot_reply)
 
 # ---------------------------------------------------------------------------
 # MAIN EXECUTION ENTRYPOINT
@@ -157,8 +216,10 @@ def main():
 
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
+    
