@@ -2,9 +2,11 @@ import os
 import logging
 import threading
 import asyncio
+import tempfile
 from io import BytesIO
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from PIL import Image
+import cv2
 from google import genai
 from telegram import Update
 from telegram.ext import (
@@ -129,7 +131,7 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
 
 # ---------------------------------------------------------------------------
 # HELPER TO SEND MULTIPLE REPLIES SEQUENTIALLY
-# ----------------------------------------------------------------/----------
+# ---------------------------------------------------------------------------
 async def send_split_replies(update: Update, context: ContextTypes.DEFAULT_TYPE, full_reply: str):
     parts = [p.strip() for p in full_reply.split("---") if p.strip()]
     
@@ -210,25 +212,46 @@ async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     image_bytes = None
     mime_type = "image/png"
 
-    # Video stickers (.webm) or animated stickers (.tgs) cannot be parsed as static images
-    if sticker.is_video or sticker.is_animated:
-        sticker_emoji = sticker.emoji or "😉"
-        formatted_user_message = f"[User: {user_first_name} (Male) sent an animated/video sticker with emoji: {sticker_emoji}]. React to it playfully."
-    else:
-        try:
-            file_obj = await sticker.get_file()
-            byte_arr = await file_obj.download_as_bytearray()
+    try:
+        file_obj = await sticker.get_file()
+        byte_arr = await file_obj.download_as_bytearray()
+
+        if sticker.is_video:
+            # For video (.webm) stickers, write to a temp file and extract a central frame using OpenCV
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_video:
+                temp_video.write(byte_arr)
+                temp_video_path = temp_video.name
+
+            cap = cv2.VideoCapture(temp_video_path)
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            # Jump to the middle frame of the video sticker animation
+            cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, total_frames // 2))
+            success, frame = cap.read()
+            cap.release()
             
-            # Convert static webp sticker to PNG for Gemini vision processing
+            # Clean up temp file
+            try:
+                os.unlink(temp_video_path)
+            except:
+                pass
+
+            if success and frame is not None:
+                # Convert OpenCV frame to PNG bytes
+                success_encoded, encoded_image = cv2.imencode('.png', frame)
+                if success_encoded:
+                    image_bytes = encoded_image.tobytes()
+        else:
+            # For static webp stickers, convert directly using Pillow
             img = Image.open(BytesIO(byte_arr))
             output_buffer = BytesIO()
             img.save(output_buffer, format="PNG")
             image_bytes = output_buffer.getvalue()
-        except Exception as e:
-            logger.warning(f"Could not convert static sticker graphic: {e}")
 
-        sticker_emoji = sticker.emoji or "😉"
-        formatted_user_message = f"[User: {user_first_name} (Male) sent this static sticker (Emoji context: {sticker_emoji})]. Look at the visual graphic and react to it naturally."
+    except Exception as e:
+        logger.warning(f"Could not parse sticker visual: {e}")
+
+    sticker_emoji = sticker.emoji or "😉"
+    formatted_user_message = f"[User: {user_first_name} (Male) sent this sticker (Emoji: {sticker_emoji})]. Look closely at the visual content of the sticker graphic and react to it playfully and directly."
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
