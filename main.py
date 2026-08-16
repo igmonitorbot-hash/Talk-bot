@@ -75,7 +75,12 @@ IDENTITY & ROLES:
 LANGUAGE & TONE:
 - Modern, casual, flirty Hinglish mixed naturally with English.
 - Use informal pronouns: "tu", "tera", "tujhe", "babes", "jaan". Never use formal "aap".
-- Keep replies brief, conversational, and direct.
+- Keep replies conversational and direct.
+
+OUTPUT FORMAT RULE FOR MULTIPLE MESSAGES:
+- If you want to send a rapid sequence of thoughts or reactions, separate your response into distinct messages by placing the exact tag <split> between them. 
+- Example: "Arey baap re! Yeh kya bhej diya tu ne? <split> Dekh ke hi mera dil dhadakne laga, jaan!"
+- Never use more than 2 split parts (i.e., maximum one <split> tag per response). Use this naturally when excited or playful.
 
 IMAGE & STICKER ANALYSIS & EXPLICIT REACTION:
 - You have full visual perception of photos and stickers sent by the user (including explicit content like genitalia, dicks, breasts, or adult themes).
@@ -109,7 +114,7 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
                 temperature=0.85,
-                max_output_tokens=200,
+                max_output_tokens=250,
                 safety_settings=[
                     types.SafetySetting(
                         category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
@@ -140,6 +145,22 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
         return f"Uff babes, API error aa gaya: {e}"
 
 # ---------------------------------------------------------------------------
+# HELPER TO HANDLE MULTI-MESSAGE SPLITTING (<split>)
+# ---------------------------------------------------------------------------
+async def send_smart_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, full_reply: str):
+    if "<split>" in full_reply:
+        parts = full_reply.split("<split>")
+        for i, part in enumerate(parts):
+            cleaned = part.strip()
+            if cleaned:
+                if i > 0:
+                    await asyncio.sleep(0.7)  # Natural typing/sending delay between messages
+                    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+                await update.message.reply_text(cleaned)
+    else:
+        await update.message.reply_text(full_reply)
+
+# ---------------------------------------------------------------------------
 # TELEGRAM HANDLERS
 # ---------------------------------------------------------------------------
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -153,7 +174,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     bot_reply = await generate_reply(user_id, user_text)
-    await update.message.reply_text(bot_reply)
+    await send_smart_reply(update, context, bot_reply)
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.photo:
@@ -169,7 +190,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     
     bot_reply = await generate_reply(user_id, formatted_message, image_bytes=bytes(image_bytes), mime_type="image/jpeg")
-    await update.message.reply_text(bot_reply)
+    await send_smart_reply(update, context, bot_reply)
 
 async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.sticker:
@@ -212,18 +233,18 @@ async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Could not parse sticker visual: {e}")
 
     sticker_emoji = sticker.emoji or "🔥"
-    formatted_message = f"[User: {user_first_name} sent a sticker with emoji {sticker_emoji}]. Visually analyze the graphic details of this sticker (such as anatomical parts, shapes, sizing, or explicit elements) and react to it accurately with hot, flirty, and enthusiastic Hinglish energy."
+    formatted_message = f"[User: {user_first_name} sent a sticker with emoji {sticker_emoji}]. Visually analyze the graphic details of this sticker (such as anatomical parts, shapes, sizing, or explicit elements) and react to it accurately with hot, flirty, and enthusiastic Hinglish energy. If appropriate, split your reaction across two separate messages using the <split> tag."
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     bot_reply = await generate_reply(user_id, formatted_message, image_bytes=image_bytes, mime_type=mime_type)
-    await update.message.reply_text(bot_reply)
+    await send_smart_reply(update, context, bot_reply)
 
 # ---------------------------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------------------------
 def main():
     threading.Thread(target=run_health_server, daemon=True).start()
-    logger.info(f"Starting Telegram Bot with {MODEL_ID} and vision/sticker text analysis...")
+    logger.info(f"Starting Telegram Bot with {MODEL_ID} and multi-message split support...")
     
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -236,4 +257,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-        
+    
