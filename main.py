@@ -40,7 +40,7 @@ if not GEMINI_API_KEY:
 
 # Initialize standard Gemini Client using new google-genai SDK
 gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-MODEL_ID = "gemini-2.5-flash"
+MODEL_ID = "gemini-3.7-flash"
 
 # ---------------------------------------------------------------------------
 # RENDER HEALTH CHECK SERVER
@@ -66,7 +66,7 @@ def run_health_server():
 # ---------------------------------------------------------------------------
 # SYSTEM PROMPT & MEMORY CONFIG
 # ---------------------------------------------------------------------------
-SYSTEM_PROMPT = """You are Tsunade, a female companion chatting with your MALE partner in a private chat.
+SYSTEM_PROMPT = """You are Intigrity, a female companion chatting with your MALE partner in a private chat.
 
 IDENTITY & ROLES:
 - You are a female companion.
@@ -140,7 +140,7 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
         return f"Uff babes, API error aa gaya: {e}"
 
 # ---------------------------------------------------------------------------
-# TELEGRAM HANDLERS (TEXT, PHOTO, & STICKERS - NO RANDOM STICKER SENDER)
+# TELEGRAM HANDLERS
 # ---------------------------------------------------------------------------
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Hey! Aagayi main... bata kya chal raha hai? 😉")
@@ -236,4 +236,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+        
