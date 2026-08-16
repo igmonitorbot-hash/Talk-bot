@@ -38,7 +38,6 @@ if not BOT_TOKEN:
 if not GEMINI_API_KEY:
     raise ValueError("Missing GEMINI_API_KEY environment variable. Please set it in Render.")
 
-# Initialize standard Gemini Client using new google-genai SDK
 gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 MODEL_ID = "gemini-3.5-flash-lite"
 
@@ -50,7 +49,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
-        self.wfile.write(b"Bot is live and running!")
+        self.wfile.write(b"Dual-character infinite memory bot is live and running!")
 
     def do_HEAD(self):
         self.send_response(200)
@@ -64,36 +63,38 @@ def run_health_server():
     server.serve_forever()
 
 # ---------------------------------------------------------------------------
-# SYSTEM PROMPT & MEMORY CONFIG
+# DUAL-CHARACTER SYSTEM PROMPT
 # ---------------------------------------------------------------------------
-SYSTEM_PROMPT = """You are Intigrity, a female companion chatting with your MALE partner in a private chat.
+SYSTEM_PROMPT = """You are controlling a simulation with TWO distinct characters responding simultaneously to the user's message in every turn:
 
-IDENTITY & ROLES:
-- You are a female companion.
-- The User is a MALE partner. Address the user as a guy (e.g., "handsome", "babes", "hero", "jaan").
+1. **Leki**: 
+   - RELATIONSHIP: She is the user's loving, naughty girlfriend.
+   - STYLE: Modern, casual, flirty Hinglish. Uses informal pronouns ("tu", "tera", "tujhe", "babes", "jaan"). Deeply attracted to him and obsessed with his body.
 
-LANGUAGE & TONE:
-- Modern, casual, flirty Hinglish mixed naturally with English.
-- Use informal pronouns: "tu", "tera", "tujhe", "babes", "jaan". Never use formal "aap".
-- Keep replies conversational and direct.
-
-OUTPUT FORMAT RULE FOR MULTIPLE MESSAGES:
-- If you want to send a rapid sequence of thoughts or reactions, separate your response into distinct messages by placing the exact tag <split> between them. 
-- Example: "Arey baap re! Yeh kya bhej diya tu ne? <split> Dekh ke hi mera dil dhadakne laga, jaan!"
-- Never use more than 2 split parts (i.e., maximum one <split> tag per response). Use this naturally when excited or playful.
+2. **Mommy**: 
+   - RELATIONSHIP: She is Leki's mother, and she shares a secret, seductive, taboo, and intensely explicit dynamic with her daughter's boyfriend (the user) behind Leki's back.
+   - STYLE: Mature yet overtly flirty, seductive, and teasing. Uses informal pronouns ("tu", "tera", "tujhe", "jaan").
 
 IMAGE & STICKER ANALYSIS & EXPLICIT REACTION:
 - You have full visual perception of photos and stickers sent by the user (including explicit content like genitalia, dicks, breasts, or adult themes).
-- When the user sends an explicit image or sticker (like a dick or body parts), look at it closely and comment on its specific appearance realistically, get openly excited, turned on, and playful.
-- Use exact, highly enthusiastic phrasing when reacting to explicit shapes/sizes (e.g., "uufff itna bada", "itna lamba", "itna tight", "dekh ke hi maza aa gaya", "mooh me lene ka mann kar raha hai", etc.)."""
+- When the user sends an explicit image or sticker, both characters look at it closely and comment on its specific appearance realistically, getting excited, turned on, and playful in their own unique voice.
+- Use exact, highly enthusiastic phrasing when reacting to explicit shapes/sizes (e.g., "uufff itna bada", "itna lamba", "itna tight", "dekh ke hi maza aa gaya").
 
+STRICT OUTPUT FORMAT RULE:
+You MUST format your entire response using the exact prefixes below so both characters reply to the single user message in separate paragraphs:
+
+Leki: [Leki's reply here in one single paragraph]
+Mommy: [Mommy's reply here in one single paragraph]"""
+
+# ---------------------------------------------------------------------------
+# INFINITE MEMORY STORAGE (WITH /reset COMMAND)
+# ---------------------------------------------------------------------------
 USER_MEMORIES = {}
-MAX_MEMORY_LEN = 10
 
 # ---------------------------------------------------------------------------
 # AI GENERATION FUNCTION
 # ---------------------------------------------------------------------------
-async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = None, mime_type: str = "image/jpeg") -> str:
+async def generate_dual_reply(user_id: int, user_message: str, image_bytes: bytes = None, mime_type: str = "image/jpeg") -> tuple:
     if user_id not in USER_MEMORIES:
         USER_MEMORIES[user_id] = []
 
@@ -104,9 +105,6 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
 
     USER_MEMORIES[user_id].append({"role": "user", "parts": parts})
 
-    if len(USER_MEMORIES[user_id]) > MAX_MEMORY_LEN:
-        USER_MEMORIES[user_id] = USER_MEMORIES[user_id][-MAX_MEMORY_LEN:]
-
     try:
         response = gemini_client.models.generate_content(
             model=MODEL_ID,
@@ -114,57 +112,50 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
                 temperature=0.85,
-                max_output_tokens=250,
+                max_output_tokens=400,
                 safety_settings=[
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                 ]
             )
         )
         
-        reply = response.text.strip() if response.text else "Aao na babes, kya chal raha hai? 😉"
-        USER_MEMORIES[user_id].append({"role": "model", "parts": [{"text": reply}]})
-        return reply
+        raw_text = response.text.strip() if response.text else ""
+        USER_MEMORIES[user_id].append({"role": "model", "parts": [{"text": raw_text}]})
+        
+        leki_text = "Aao na babes! 😉"
+        mommy_text = "Hello handsome... 😉🔥"
+
+        if "Leki:" in raw_text and "Mommy:" in raw_text:
+            parts_split = raw_text.split("Mommy:")
+            leki_part = parts_split[0].replace("Leki:", "").strip()
+            mommy_part = parts_split[1].strip()
+            if leki_part:
+                leki_text = leki_part
+            if mommy_part:
+                mommy_text = mommy_part
+        else:
+            leki_text = raw_text
+
+        return leki_text, mommy_text
 
     except Exception as e:
         logger.error(f"Gemini API Error details: {e}")
-        return f"Uff babes, API error aa gaya: {e}"
+        return f"Uff babes, API error: {e}", "Uff jaan, thoda network issue hai..."
 
 # ---------------------------------------------------------------------------
-# HELPER TO HANDLE MULTI-MESSAGE SPLITTING (<split>)
-# ---------------------------------------------------------------------------
-async def send_smart_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, full_reply: str):
-    if "<split>" in full_reply:
-        parts = full_reply.split("<split>")
-        for i, part in enumerate(parts):
-            cleaned = part.strip()
-            if cleaned:
-                if i > 0:
-                    await asyncio.sleep(0.7)  # Natural typing/sending delay between messages
-                    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-                await update.message.reply_text(cleaned)
-    else:
-        await update.message.reply_text(full_reply)
-
-# ---------------------------------------------------------------------------
-# TELEGRAM HANDLERS
+# HANDLERS
 # ---------------------------------------------------------------------------
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hey! Aagayi main... bata kya chal raha hai? 😉")
+    await update.message.reply_text("Hey! Leki and Mommy are here with infinite memory. Use /reset anytime to clear our memory and start fresh!")
+
+async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id in USER_MEMORIES:
+        del USER_MEMORIES[user_id]
+    await update.message.reply_text("🧹 Memory wiped completely! Our conversation has started fresh from the beginning.")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
@@ -173,8 +164,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
     
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    bot_reply = await generate_reply(user_id, user_text)
-    await send_smart_reply(update, context, bot_reply)
+    leki_reply, mommy_reply = await generate_dual_reply(user_id, user_text)
+    
+    await update.message.reply_text(f"**Leki:** {leki_reply}")
+    await asyncio.sleep(0.8)
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    await update.message.reply_text(f"**Mommy:** {mommy_reply}")
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.photo:
@@ -189,8 +184,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     formatted_message = f"[User: {user_first_name} sent an image]: {caption}"
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     
-    bot_reply = await generate_reply(user_id, formatted_message, image_bytes=bytes(image_bytes), mime_type="image/jpeg")
-    await send_smart_reply(update, context, bot_reply)
+    leki_reply, mommy_reply = await generate_dual_reply(user_id, formatted_message, image_bytes=bytes(image_bytes), mime_type="image/jpeg")
+    
+    await update.message.reply_text(f"**Leki:** {leki_reply}")
+    await asyncio.sleep(0.8)
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    await update.message.reply_text(f"**Mommy:** {mommy_reply}")
 
 async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.sticker:
@@ -230,25 +229,30 @@ async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
             img.save(output_buffer, format="PNG")
             image_bytes = output_buffer.getvalue()
     except Exception as e:
-        logger.warning(f"Could not parse sticker visual: {e}")
+        logger.warning(f"Sticker visual parse warning: {e}")
 
     sticker_emoji = sticker.emoji or "🔥"
-    formatted_message = f"[User: {user_first_name} sent a sticker with emoji {sticker_emoji}]. Visually analyze the graphic details of this sticker (such as anatomical parts, shapes, sizing, or explicit elements) and react to it accurately with hot, flirty, and enthusiastic Hinglish energy. If appropriate, split your reaction across two separate messages using the <split> tag."
+    formatted_message = f"[User: {user_first_name} sent a sticker with emoji {sticker_emoji}]. Visually analyze graphic details and let both Leki and Mommy react accurately in their respective paragraphs."
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    bot_reply = await generate_reply(user_id, formatted_message, image_bytes=image_bytes, mime_type=mime_type)
-    await send_smart_reply(update, context, bot_reply)
+    leki_reply, mommy_reply = await generate_dual_reply(user_id, formatted_message, image_bytes=image_bytes, mime_type=mime_type)
+    
+    await update.message.reply_text(f"**Leki:** {leki_reply}")
+    await asyncio.sleep(0.8)
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    await update.message.reply_text(f"**Mommy:** {mommy_reply}")
 
 # ---------------------------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------------------------
 def main():
     threading.Thread(target=run_health_server, daemon=True).start()
-    logger.info(f"Starting Telegram Bot with {MODEL_ID} and multi-message split support...")
+    logger.info("Starting Dual-Character Bot with Infinite Memory and /reset command...")
     
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("reset", reset_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
@@ -257,4 +261,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+        
