@@ -1,4 +1,4 @@
 google-genai
 python-telegram-bot
 Pillow
-
+opencv-python-headless
