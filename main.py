@@ -3,12 +3,12 @@ import logging
 import threading
 import asyncio
 import tempfile
-import random
 from io import BytesIO
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from PIL import Image
 import cv2
 from google import genai
+from google.genai import types
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -43,128 +43,6 @@ gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 MODEL_ID = "gemini-2.5-flash"
 
 # ---------------------------------------------------------------------------
-# FULL BOT STICKERS LIBRARY WITH ALL 100+ IDS & CONTEXT TAGS
-# ---------------------------------------------------------------------------
-BOT_STICKERS = [
-    {"id": "CAACAgIAAxkBAAICbGqBYK0ZNBgGL7zVvdSiwmTV9JMcAAJQeAACNP85Se57543TR05nPQQ", "tags": ["tease", "hot", "breast", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICbmqBYK1TzvYH6sO7-5-PaInP2jQHAAJFZAACf345SfmSXNO9tnzqPQQ", "tags": ["hot", "breast", "sensual", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICcGqBYK5QzcvsXdAV0woUQCFepmxuAAIZaQACeEg5SfqXttO-Pj8kPQQ", "tags": ["kiss", "love", "romantic"]},
-    {"id": "CAACAgIAAxkBAAICcmqBYK6p8kxaXv7_K7Bgu4S6P8qGAALJdgACAYw5SVVwxYkpq5OIPQQ", "tags": ["flirt", "wink", "playful"]},
-    {"id": "CAACAgIAAxkBAAICfGqBYLCNTbaEVnKvsNs3KEaJw9gMAALHggACsoMwSboGrZLD1f7TPQQ", "tags": ["hot", "tease", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICfWqBYLB1II3P_1q7HF-mA-UflUbEAAJiZAACNwABOElL7xSKng22lT0E", "tags": ["happy", "cute", "flirt"]},
-    {"id": "CAACAgIAAxkBAAICfmqBYLBCarfZx-wmMZmawHuCxUz7AAK5bAACt3E5SYCaDN7pp0YAAT0E", "tags": ["hot", "naughty", "breast"]},
-    {"id": "CAACAgIAAxkBAAICf2qBYLB31WnIev4K_hHWUNxkYTKXAAKCaAACIaM5ScqK7SbtRX-VPQQ", "tags": ["playful", "tease"]},
-    {"id": "CAACAgIAAxkBAAICgGqBYLA-NKhMsXEJe8u0kP9Ayr4UAAL1ZAAC_8U5STa4ykWtTdmMPQQ", "tags": ["love", "romantic"]},
-    {"id": "CAACAgIAAxkBAAICgWqBYLCCdJScnkkTqV90vtE6rfgcAALrcwACj7oxSTnRHWEueYnUPQQ", "tags": ["flirt", "wink"]},
-    {"id": "CAACAgIAAxkBAAICgmqBYLB42rBPzZ4QFoG0Wa80AAFcQQACfmkAAjX6OEnd-eL8hZ-boz0E", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICg2qBYLE0UF7kHYeon7OZyUfrVA4AA_1xAAIlJTlJ7D_hhpNbUdA9BA", "tags": ["breast", "hot", "tease"]},
-    {"id": "CAACAgIAAxkBAAIChWqBYLF2eSP4EVSm4t28xuS0gFNBAALrdAACM8cwSbjMKKSL2wNaPQQ", "tags": ["playful", "cute"]},
-    {"id": "CAACAgIAAxkBAAICh2qBYLGH1v6BdCeU5u4XCsSj9vkAA9JpAAL_ZzhJS72rTTcl_cY9BA", "tags": ["hot", "naughty", "breast"]},
-    {"id": "CAACAgIAAxkBAAICiGqBYLG8glL2kkz7u8wH2cg4H1qhAAJ9bAACYkQ4SVB--71CGX4VPQQ", "tags": ["kiss", "romantic"]},
-    {"id": "CAACAgIAAxkBAAICimqBYLH-cmt0ZqXPWlysdlklH11aAAJyeAACMnUwSQ6xPX8LsxXBPQQ", "tags": ["flirt", "hot"]},
-    {"id": "CAACAgIAAxkBAAICjGqBYLEFKitmP1h7GcTHPx3uFdkBAALuZgAC7l45SY9zaSClZqIrPQQ", "tags": ["hot", "tease"]},
-    {"id": "CAACAgIAAxkBAAIClWqBYLT5dhfbh6JAR-Etx34DSZ7JAALdegACR_kwSb1omU_RR2_7PQQ", "tags": ["playful", "cute"]},
-    {"id": "CAACAgIAAxkBAAICl2qBYLRAfbExD1M3l8xpkEN8gFTDAAIafQACh-kxSbYtyczDISuWPQQ", "tags": ["flirt", "wink"]},
-    {"id": "CAACAgIAAxkBAAICmGqBYLT4bYSeBJF4cvQaqrSeREB2AAKsegACbkgxSdezHxTf_JZvPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICmWqBYLSLc7i4pAABWQnp1JXdJpuCWwACg2sAAnaOOUmXvJxVzbkoRD0E", "tags": ["cute", "love"]},
-    {"id": "CAACAgIAAxkBAAICmmqBYLSOr_RYbLwoBCmjlYQqMYpjAAL5bwACPjo4SQjX6UZjd0ykPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAICm2qBYLQzinETCInGYPfeeHYjT_xjAALqdgACOgo5SU9o-iJXvjExPQQ", "tags": ["tease", "playful"]},
-    {"id": "CAACAgIAAxkBAAICnGqBYLQ-FDfXwiyirnDSmlqUUA4lAAIicAACbXI5SeacfE0DwZJ8PQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICnWqBYLTbFRbL0aM40F8RSblXrly2AALPawACicU4SX0NJKAb9aRcPQQ", "tags": ["flirt", "wink"]},
-    {"id": "CAACAgIAAxkBAAICnmqBYLRviu5XiQABv_uAmfLQcT76WAAC5nQAAmyEOEkGikosTM9aCz0E", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAICoWqBYLQQKjh1lAQLBWQCkw1YUa79AAJ6dQACrm0wSZ5HziQF1F2lPQQ", "tags": ["love", "romantic"]},
-    {"id": "CAACAgIAAxkBAAIComqBYLUroKCjFT1j63XMuBecmyMQAAJjZQAC-hs4SfbpiqO8rlL3PQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICpGqBYLUW0EIVhpRmus40aznn5pwiAAIHZwACAZw4SfiXRrCYMSzlPQQ", "tags": ["flirt", "playful"]},
-    {"id": "CAACAgIAAxkBAAICpWqBYLVz9WlKSoEuuR4r4PAS9Yf1AAKvbgACoGg4SbyUcOVnYIGyPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAICpmqBYLXQ4SwfO2Ijt4NX0zwt-spFAAJsZgAClgk5SYRhc2HlalDZPQQ", "tags": ["hot", "tease"]},
-    {"id": "CAACAgIAAxkBAAICqGqBYLV6u1kqbZTSF7G1-7B_pQAB9AACCHwAAtP7MEmxXQMvTio2yj0E", "tags": ["cute", "playful"]},
-    {"id": "CAACAgIAAxkBAAICq2qBYLVIzQQw06TWewyzTvME21tvAAI-YwACHpY4SahlEpj8x2klPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICrWqBYLbuprgJX1MdVFuboueYRKvmAALfbwACmMU4ScVuFX8NX0dbPQQ", "tags": ["love", "kiss"]},
-    {"id": "CAACAgIAAxkBAAICr2qBYLbmsEPiCc4-NZCITBv2D8hHAAJ5awACiJw5SQvz4mc3QOkOPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAICtGqBYLeZRWe54nJfNnXEAAHj2PU-TAACB3IAAgfUMEmwUzswtOTGkT0E", "tags": ["playful", "wink"]},
-    {"id": "CAACAgIAAxkBAAICtWqBYLcQpFGhcl4R6mm2xccNAthLAAJzagACMvQ4STBwKv9vzHvSPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICt2qBYLdXkiBSz283JJkrtgg9ljtoAALtaAACgow4SbRzr1biidY0PQQ", "tags": ["tease", "hot"]},
-    {"id": "CAACAgIAAxkBAAICuGqBYLfUNlyUK-pfd2NXmzRS94fLAAJ4aAACw-M5Sew30gE7g6RjPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAICumqBYLerH4H0pLWl7jLDFj_g6wr5AAIIYgACNq05SQyqszdp6IEWPQQ", "tags": ["flirt", "romantic"]},
-    {"id": "CAACAgIAAxkBAAICu2qBYLcQPG2AOLKUZK37DfpUq06wAAIBbAACzYE4SfJLDPDcoLanPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICvWqBYLg1zPRBcII7xQABnPdaElP6tgACaGIAAhxUOUn7G8d93_cNSz0E", "tags": ["cute", "playful"]},
-    {"id": "CAACAgIAAxkBAAICvmqBYLiXeZdbSwIrGaZwac0pBTwMAAI3bgACVPY5SSjLnxOxL4DdPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAICwGqBYLhHMnfvWFjiQZ7qUrsf57vBAAKYbAAC1fA4STJzdlW8Q1ezPQQ", "tags": ["flirt", "wink"]},
-    {"id": "CAACAgIAAxkBAAICwWqBYLglgRg1j6WuFc8hsz-NhziOAAJHZgACSYU4SamFO5DfostTPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICxmqBYLlS1JKmIQxsan8yqtynM-tKAAKVdQACXyE5SZHZ0HPgA1GoPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAICymqBYLquCZ3w2sQrpWJ_IrAHBXjvAAKBYgACU6E5STTN-xA2pRbLPQQ", "tags": ["love", "romantic"]},
-    {"id": "CAACAgIAAxkBAAICzWqBYLpiDBKoEbzBO1HF6jZBzmcSAAJZaAACPmo4SVW0rGFnQwzPPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICzmqBYLotcVa482Ja_Ng49kYZlgQ4AAJeZwACneE5SeZFAso8MXKkPQQ", "tags": ["tease", "hot"]},
-    {"id": "CAACAgIAAxkBAAIC0GqBYLp1UXdllxm1vuvza8rnnt_FAAItdQAC2z45Sf8TjgV5oGFlPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIC02qBYLtIoy8t8UYIbMFUbbolnmaYAAK_YAACPH45Sbp08Umi-12JPQQ", "tags": ["playful", "flirt"]},
-    {"id": "CAACAgIAAxkBAAIC1WqBYLxk3wT3hfK2tCp6IOZXyKiZAAI8YwACu5I5SR37PT967HTNPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIC12qBYLzb3H91kn4QbiGgCBRmPhGTAAIBagAC0hc4SU1S0r8Gor58PQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIC2WqBYLwqGIrNV5r2yw1XGk_paYQfAALdcAAC-8Y5SWARxyJEEfc9PQQ", "tags": ["love", "kiss"]},
-    {"id": "CAACAgIAAxkBAAIC2mqBYLydaevuwoS79Be7HdQ9kRLXAALYaQACbGQ5Sa_tS4MHUjTvPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIC3mqBYL3Wf8dDOEa_MbwCPk-hl56MAALZdgAC4Do4Scv5WEr8IbxOPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIC4GqBYL3neSxzTw8OPBhHrCZ1Tf1iAALSZgAC66o5SVNTwG4f3MZGPQQ", "tags": ["flirt", "wink"]},
-    {"id": "CAACAgIAAxkBAAIC4WqBYL6vNExmmESwfx0snlcAASQVVwACZGgAAhKdOEl3YSi7AayV-j0E", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIC42qBYL50HcG3hs3UYbjjL_7ky2DlAAKzbgAC4b4xSSHNDkt-8TVEPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIC5WqBYL7TZFCwqiDVPf8BScgbX0Z3AAJGcwACBGw5SeSj8cGGGDGlPQQ", "tags": ["playful", "cute"]},
-    {"id": "CAACAgIAAxkBAAIC52qBYL40_v87pXGphpyYMj3QrV5yAAITYwAC3cA4SYMY5CWhF7IFPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIC6GqBYL8ikAf3DpwoEZEfXtA7MQWKAAJFcAACY_85SYmu4hMpAAG0Rz0E", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIC6WqBYL-BeZNG2fwhULlB-jmiIj-rAAKqcQAC8E04SbFfnvCSuumGPQQ", "tags": ["flirt", "romantic"]},
-    {"id": "CAACAgIAAxkBAAIC62qBYL9e4yeI88vlYzDWU1DnexO2AALQfQACJiUxSWU1dtXwg7EXPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIC7WqBYL9G1KVwZfPDjrSa6Xe6AigIAAJIbAAC12w4SV-6wv5zkdo_PQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIC8mqBYMDmNX6AjLGcvfF6W9RtO7q3AAKiZAACVeo5SZBSrnryCT1zPQQ", "tags": ["playful", "cute"]},
-    {"id": "CAACAgIAAxkBAAIC9GqBYMDN3a6LZC2BXVbyiDcdblmVAALjdAACkB4xSc5uDrITTJnTPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIC9mqBYMFY3ihuHvgwrCRZZReYOlY_AAIHfAACj0YxSTRkW6i-aHwyPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIC-GqBYMFcL08thRsq2KwyaFi3shYCAAJhZgACrsc5SUvvmcLWa_WRPQQ", "tags": ["flirt", "wink"]},
-    {"id": "CAACAgIAAxkBAAIC-mqBYMEKAAFRiv3sHQABAsUn1SgLMmsAAp5vAAKUwDlJrZBuWetgR709BA", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIC_GqBYMH3saGVySWW5Q-K1TvJwIXiAAKLZAACbHQ5SaPU-P-d-1XRPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIC_mqBYME3CJjX6FAZm4z5KHmKekT2AAKzdwAC1bg4SW0a4eBrg8RSPQQ", "tags": ["playful", "tease"]},
-    {"id": "CAACAgIAAxkBAAIC_2qBYMKRVR8gRGzOv80msatXmMXrAAI0cAACBDYwSSN0lgL4vYUfPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIDAWqBYMJty8Awxak-xbcO4IEolUtxAAJwagACqA44Sel1WlCzXbwrPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIDA2qBYMKlUbWawpXZUmnKct0yXCF3AALMdQACFuM4SQKC-B0HSWikPQQ", "tags": ["flirt", "romantic"]},
-    {"id": "CAACAgIAAxkBAAIDCWqBYMOo2AFIx0SgxteoJmPJRHH0AAKvbQACxgs5SXM3f8eyVqSpPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIDDGqBYMTNznyiBZ7my1YJeAYPazweAAICdAACaJs4SS617VNWr_tLPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIDDmqBYMRi_P-uIZ8AAa_ySAGvlvCdWAACLHMAAsf7OUlaqs27BivsNz0E", "tags": ["playful", "cute"]},
-    {"id": "CAACAgIAAxkBAAIDD2qBYMQrDx7Jlrz5VeCQ5IvZJqGJAAL1YwACxTM4ST1QOJF2ydVFPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIDEWqBYMRcZ1KhQxo1doOOBhIYIJtLAAJMbgACRVM4SRRiSouydUJSPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIDFGqBYMUAAesxKSnN9cybQVcnUMiHYgACy3IAAhRgOEmBfR_6gm8vbj0E", "tags": ["flirt", "wink"]},
-    {"id": "CAACAgIAAxkBAAIDFWqBYMWLnicCVgGm0j1ciSsLp8fcAALDlAACBW8xSY73COVpQSwPPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIDF2qBYMWjZHAc7JWx5Ba743Dyr7D0AALRcwAC2a85SQKG6IjWqcVwPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIDGmqBYO1lHWEPw73c-ay-rPLkMjImAAJwcAACLx45Sc7I3r6Yj3eaPQQ", "tags": ["playful", "tease"]},
-    {"id": "CAACAgIAAxkBAAIDHGqBYO1_IAABX98tXwJAILUFuNP-qQACkmYAAqEiOEnKYkuQtWm4dz0E", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIDHmqBYO6Ud617NYZ0ahT6_9iUSahhAAJJZwACWmk5SUZbck7sDb4DPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIDIGqBYO80Ackz6glaDV5g5RI-13lGAAJLdQACn784Saa7JHw7NjWOPQQ", "tags": ["flirt", "romantic"]},
-    {"id": "CAACAgIAAxkBAAICUGqBYJQecBOKhUzh1bTjIHSg7olTAAK5bQACdEE5SQj2LmeW426NPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIDJGqBYPCVMxZbNSz6fkoGdrsmaOp1AAKhZwAC9hc5SbjI6c304Q-dPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIDJmqBYPAl2PTN81pkbkEPKyWJBjKXAAJwZAACZQQ4SXZN1DcsnkJaPQQ", "tags": ["playful", "cute"]},
-    {"id": "CAACAgIAAxkBAAIDKGqBYPAUOyifyutrw7ks7NPj-pHiAAJ0dgAC4rwwSee5NWwyiMFCPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIDKmqBYPFLObNXLFSbJT5dUVyh2H2-AALKbgACizg5SfOqX522HIJlPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIDLGqBYPFez3tK_6WzxTMWE0PYa0NHAAJqbAACf9M4Sa9HuYtCDUYGPQQ", "tags": ["flirt", "wink"]},
-    {"id": "CAACAgIAAxkBAAIDLmqBYPK3w5f_msW25E7Ez2m1PCxiAAJaawACVi44SRrQ_EbeSxxqPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIDMGqBYPKU9TypGTsPxLha7e9ba6SFAALidQAC-cgxSRTlmLFfJJLTPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIDMmqBYPK_A3kkvJYFjSkWvVQ5_lMEAAI5aQACXu45SZHPXdobJcRoPQQ", "tags": ["playful", "tease"]},
-    {"id": "CAACAgIAAxkBAAIDNGqBYPN_LHm_wi-a4yJAvJKcmqOFAAI6bgAC4SA5SQaSAlEkDniBPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAIDNmqBYPMun8scbK7jterqOYqijCpSAAJ9cgACoXs5SeqcSSvyZP0BPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAIDOGqBYPTF_b6kktRV16s3x9Cz57KmAALhYgACl2c5SRBbx9a5rbB4PQQ", "tags": ["flirt", "romantic"]},
-    {"id": "CAACAgIAAxkBAAIDOmqBYPWVSyytMw0ZlkG_-laBuDVoAAIVNwAC_6jZSYFgLbqjfmAKPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICUmqBYKoXMjnetoHCgtvY5MudBmFYAAKGewACimk4SUU5g8NrgnnTPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAICU2qBYKodqdQRZelhw_pj6Jx-Tbd8AAIvdAACH0Q5SW2XaYzwy4eBPQQ", "tags": ["playful", "cute"]},
-    {"id": "CAACAgIAAxkBAAICVGqBYKqSgv8qLKotR0ZReU9SgNIGAAIqcwACNbQ4STnIsPlfdPjnPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICVWqBYKqlabBKCZ2Iy_9ZWOl8cP_hAAIBZwACroI5SfXAiozks3kLPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAICVmqBYKoX1m1ra8_T3uklKt7KL1qbAAKlcAACFsE4ScCo79tIl9biPQQ", "tags": ["flirt", "wink"]},
-    {"id": "CAACAgIAAxkBAAICV2qBYKrkVEOZQAg04AAB9FBoFFF6MQACsGcAAr0mOEnlgBnOxxacEj0E", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICWGqBYKo8Ig5etlucGOC3jYAk2NMAA6yAAAJKwDFJq-Ebp2Xy14Q9BA", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAICWWqBYKrbPsHIPAqquam8U3OSMD55AALkcQAC6MQ4SaQi-Xo5-yH6PQQ", "tags": ["playful", "tease"]},
-    {"id": "CAACAgIAAxkBAAICWmqBYKpKihztcjzxJ03JycjcQMiCAAJMZwACawM5Sc8zGXlvWgdUPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICXWqBYKrvpjB2INfm55vvHlB5taZiAAJadAAC5XExSU-6syfDSKclPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAICX2qBYKvg-V8eaBy_eK7atn-pfK9gAAKNcgACd2E4Sb4PAAGetPRkKT0E", "tags": ["flirt", "romantic"]},
-    {"id": "CAACAgIAAxkBAAICYWqBYKtBBvPpp8PRYRfQDxHq7RK9AAJ_bQAC8Wc5SS3GlCXwcmN6PQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICY2qBYKv3CYGOp42IgiDVJox3kQceAAIyawAC2f84SZwbK_NVSbCVPQQ", "tags": ["hot", "breast"]},
-    {"id": "CAACAgIAAxkBAAICZWqBYKxizWCiWAWvRPxDiXum7waKAAJcawAC-l45SRTGnvzg9tQqPQQ", "tags": ["playful", "cute"]},
-    {"id": "CAACAgIAAxkBAAICZ2qBYKwQRkXIrTvDgtcdL-bIZQXrAAIOagACJh44SZr3bhpBedTbPQQ", "tags": ["hot", "naughty"]},
-    {"id": "CAACAgIAAxkBAAICaWqBYKyZO-xHP1HlL4p1u7LYB0CTAAJrbQACHMA4SSYLSUYMNNCTPQQ", "tags": ["hot", "breast"]}
-]
-
-# ---------------------------------------------------------------------------
 # RENDER HEALTH CHECK SERVER
 # ---------------------------------------------------------------------------
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -188,7 +66,7 @@ def run_health_server():
 # ---------------------------------------------------------------------------
 # SYSTEM PROMPT & MEMORY CONFIG
 # ---------------------------------------------------------------------------
-SYSTEM_PROMPT = """You are Intigrity, a female companion chatting with your MALE partner in a private chat.
+SYSTEM_PROMPT = """You are Tsunade, a female companion chatting with your MALE partner in a private chat.
 
 IDENTITY & ROLES:
 - You are a female companion.
@@ -197,17 +75,18 @@ IDENTITY & ROLES:
 LANGUAGE & TONE:
 - Modern, casual, flirty Hinglish mixed naturally with English.
 - Use informal pronouns: "tu", "tera", "tujhe", "babes", "jaan". Never use formal "aap".
-- Keep replies brief and conversational.
-- EXPLICIT CONTENT REACTION: If the user sends an intimate, sexual, or explicit image or sticker (like genitalia or explicit adult content) or asks to see your body, get openly excited, turned on, and playful. Use phrases like "itna bada", "itna tight", "dekh ke hi maza aa gaya", or similar naughty Hinglish compliments."""
+- Keep replies brief, conversational, and direct.
+
+IMAGE & STICKER ANALYSIS & EXPLICIT REACTION:
+- You have full visual perception of photos and stickers sent by the user (including explicit content like genitalia, dicks, breasts, or adult themes).
+- When the user sends an explicit image or sticker (like a dick or body parts), look at it closely and comment on its specific appearance realistically, get openly excited, turned on, and playful.
+- Use exact, highly enthusiastic phrasing when reacting to explicit shapes/sizes (e.g., "uufff itna bada", "itna lamba", "itna tight", "dekh ke hi maza aa gaya", "mooh me lene ka mann kar raha hai", etc.)."""
 
 USER_MEMORIES = {}
 MAX_MEMORY_LEN = 10
 
-
-from google.genai import types
-
 # ---------------------------------------------------------------------------
-# AI GENERATION FUNCTION (WITH UNLOCKED SAFETY SETTINGS)
+# AI GENERATION FUNCTION
 # ---------------------------------------------------------------------------
 async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = None, mime_type: str = "image/jpeg") -> str:
     if user_id not in USER_MEMORIES:
@@ -224,7 +103,6 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
         USER_MEMORIES[user_id] = USER_MEMORIES[user_id][-MAX_MEMORY_LEN:]
 
     try:
-        # Configured to allow adult/spicy contexts without throwing safety exceptions
         response = gemini_client.models.generate_content(
             model=MODEL_ID,
             contents=USER_MEMORIES[user_id],
@@ -247,42 +125,10 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
 
     except Exception as e:
         logger.error(f"Gemini API Error details: {e}")
-        # Detailed logging so you can see if anything else goes wrong, with a better backup reply
         return "Uff babes, tu bhi na... itna garam mat kar, ek baar aur bhej! 🔥"
 
 # ---------------------------------------------------------------------------
-# SMART CONTEXTUAL STICKER SENDER
-# ---------------------------------------------------------------------------
-async def send_split_replies(update: Update, context: ContextTypes.DEFAULT_TYPE, full_reply: str, user_text: str = ""):
-    await update.message.reply_text(full_reply)
-
-    combined_context = (user_text + " " + full_reply).lower()
-    
-    selected_tags = []
-    if any(keyword in combined_context for keyword in ["breast", "boobs", "tits", "chuchi", "chest", "show me"]):
-        selected_tags = ["breast", "hot", "naughty"]
-    elif any(keyword in combined_context for keyword in ["kiss", "chummi", "lips", "hug"]):
-        selected_tags = ["kiss", "romantic", "love"]
-    elif any(keyword in combined_context for keyword in ["hot", "naughty", "sex", "mast", "maza"]):
-        selected_tags = ["hot", "naughty", "tease"]
-    else:
-        selected_tags = ["flirt", "wink", "playful"]
-
-    matching_stickers = [s["id"] for s in BOT_STICKERS if any(tag in s["tags"] for tag in selected_tags)]
-    if not matching_stickers:
-        matching_stickers = [s["id"] for s in BOT_STICKERS]
-
-    if BOT_STICKERS and (random.random() < 0.8):
-        chosen_sticker = random.choice(matching_stickers)
-        try:
-            await asyncio.sleep(0.6)
-            await update.message.reply_sticker(chosen_sticker)
-        except Exception as e:
-            logger.error(f"Failed to send contextual sticker: {e}")
-
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# TELEGRAM HANDLERS (TEXT, PHOTO, & STICKERS)
+# TELEGRAM HANDLERS (TEXT, PHOTO, & STICKERS - NO RANDOM STICKER REPLIES)
 # ---------------------------------------------------------------------------
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Hey! Aagayi main... bata kya chal raha hai? 😉")
@@ -295,7 +141,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     bot_reply = await generate_reply(user_id, user_text)
-    await send_split_replies(update, context, bot_reply, user_text=user_text)
+    await update.message.reply_text(bot_reply)
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.photo:
@@ -305,13 +151,13 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     photo_file = await update.message.photo[-1].get_file()
     image_bytes = await photo_file.download_as_bytearray()
-    caption = update.message.caption or "Look at this and comment on it."
+    caption = update.message.caption or "Look at this image and comment on it."
 
     formatted_message = f"[User: {user_first_name} sent an image]: {caption}"
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     
     bot_reply = await generate_reply(user_id, formatted_message, image_bytes=bytes(image_bytes), mime_type="image/jpeg")
-    await send_split_replies(update, context, bot_reply, user_text=caption)
+    await update.message.reply_text(bot_reply)
 
 async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.sticker:
@@ -354,18 +200,18 @@ async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Could not parse sticker visual: {e}")
 
     sticker_emoji = sticker.emoji or "🔥"
-    formatted_message = f"[User: {user_first_name} sent a sticker with emoji {sticker_emoji}]. Visually analyze the sticker graphic and react to it with hot, flirty, and enthusiastic Hinglish energy."
+    formatted_message = f"[User: {user_first_name} sent a sticker with emoji {sticker_emoji}]. Visually analyze the graphic details of this sticker (such as anatomical parts, shapes, sizing, or explicit elements) and react to it accurately with hot, flirty, and enthusiastic Hinglish energy."
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     bot_reply = await generate_reply(user_id, formatted_message, image_bytes=image_bytes, mime_type=mime_type)
-    await send_split_replies(update, context, bot_reply, user_text=sticker_emoji)
+    await update.message.reply_text(bot_reply)
 
 # ---------------------------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------------------------
 def main():
     threading.Thread(target=run_health_server, daemon=True).start()
-    logger.info(f"Starting Telegram Bot with {MODEL_ID}, vision processing, and full sticker library...")
+    logger.info(f"Starting Telegram Bot with {MODEL_ID} and vision/sticker text analysis...")
     
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -378,3 +224,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+        
