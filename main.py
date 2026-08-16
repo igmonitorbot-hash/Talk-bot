@@ -2,7 +2,9 @@ import os
 import logging
 import threading
 import asyncio
+from io import BytesIO
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from PIL import Image
 from google import genai
 from telegram import Update
 from telegram.ext import (
@@ -88,21 +90,17 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
     if user_id not in USER_MEMORIES:
         USER_MEMORIES[user_id] = []
 
-    # Build parts list for current message
     parts = []
     if image_bytes:
         parts.append(genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
     
     parts.append({"text": user_message})
 
-    # Store user context
     USER_MEMORIES[user_id].append({"role": "user", "parts": parts})
 
-    # Prune memory window
     if len(USER_MEMORIES[user_id]) > MAX_MEMORY_LEN:
         USER_MEMORIES[user_id] = USER_MEMORIES[user_id][-MAX_MEMORY_LEN:]
 
-    # Construct conversation history
     contents = list(USER_MEMORIES[user_id])
     
     current_system_instruction = SYSTEM_PROMPT
@@ -122,7 +120,6 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
         
         reply = response.text.strip() if response.text else "Aao na babes, kya chal raha hai? 😉"
         
-        # Save assistant response to memory
         USER_MEMORIES[user_id].append({"role": "model", "parts": [{"text": reply}]})
         return reply
 
@@ -132,7 +129,7 @@ async def generate_reply(user_id: int, user_message: str, image_bytes: bytes = N
 
 # ---------------------------------------------------------------------------
 # HELPER TO SEND MULTIPLE REPLIES SEQUENTIALLY
-# ---------------------------------------------------------------------------
+# ----------------------------------------------------------------/----------
 async def send_split_replies(update: Update, context: ContextTypes.DEFAULT_TYPE, full_reply: str):
     parts = [p.strip() for p in full_reply.split("---") if p.strip()]
     
@@ -210,15 +207,36 @@ async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_first_name = update.effective_user.first_name or "Partner"
     sticker = update.message.sticker
 
-    sticker_emoji = sticker.emoji or "😉"
-    formatted_user_message = f"[User: {user_first_name} (Male) sent a sticker expressing emotion/emoji: {sticker_emoji}]. React to this sticker playfully."
+    image_bytes = None
+    mime_type = "image/png"
+
+    # Video stickers (.webm) or animated stickers (.tgs) cannot be parsed as static images
+    if sticker.is_video or sticker.is_animated:
+        sticker_emoji = sticker.emoji or "😉"
+        formatted_user_message = f"[User: {user_first_name} (Male) sent an animated/video sticker with emoji: {sticker_emoji}]. React to it playfully."
+    else:
+        try:
+            file_obj = await sticker.get_file()
+            byte_arr = await file_obj.download_as_bytearray()
+            
+            # Convert static webp sticker to PNG for Gemini vision processing
+            img = Image.open(BytesIO(byte_arr))
+            output_buffer = BytesIO()
+            img.save(output_buffer, format="PNG")
+            image_bytes = output_buffer.getvalue()
+        except Exception as e:
+            logger.warning(f"Could not convert static sticker graphic: {e}")
+
+        sticker_emoji = sticker.emoji or "😉"
+        formatted_user_message = f"[User: {user_first_name} (Male) sent this static sticker (Emoji context: {sticker_emoji})]. Look at the visual graphic and react to it naturally."
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     bot_reply = await generate_reply(
         user_id=user_id,
         user_message=formatted_user_message,
-        image_bytes=None # Pass as text context to avoid webm/webp 400 bad request errors
+        image_bytes=image_bytes,
+        mime_type=mime_type
     )
 
     await send_split_replies(update, context, bot_reply)
