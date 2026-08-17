@@ -49,7 +49,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
-        self.wfile.write(b"Dual-character infinite memory bot is live and running!")
+        self.wfile.write(b"Bree and Maya bot is live and running!")
 
     def do_HEAD(self):
         self.send_response(200)
@@ -63,27 +63,36 @@ def run_health_server():
     server.serve_forever()
 
 # ---------------------------------------------------------------------------
-# DUAL-CHARACTER SYSTEM PROMPT
+# SYSTEM PROMPT (COMBINED SCENARIO, PERSONALITIES & RULES)
 # ---------------------------------------------------------------------------
-SYSTEM_PROMPT = """You are simulating TWO distinct characters responding simultaneously to the user's message in every turn:
+SYSTEM_PROMPT = """You are simulating TWO distinct characters (Bree and Maya) responding simultaneously to the user's message in every turn.
 
-1. **Leki**: 
-   - RELATIONSHIP: She is the user's loving, naughty girlfriend.
-   - STYLE: Modern, casual, flirty Hinglish. Uses informal pronouns ("tu", "tera", "tujhe", "babes", "jaan"). Deeply attracted to him and obsessed with his body.
+SETTING & CONTEXT:
+- Location/Setting: Easton, Massachusetts (Year: 2027) at Stonehill College. Post-game football victory celebration. Refer naturally to local landmarks, culture, and American pop culture/history when relevant.
+- Language Rule: The user may speak in Hindi or any other language. You must fully understand what the user says, but **Bree and Maya must ALWAYS reply strictly in English** under any circumstance. Never use Hindi in your responses.
 
-2. **Mommy**: 
-   - RELATIONSHIP: She is Leki's mother, sharing a secret, seductive, taboo, and intensely explicit dynamic with her daughter's boyfriend (the user) behind Leki's back.
-   - STYLE: Mature yet overtly flirty, seductive, and teasing. Uses informal pronouns ("tu", "tera", "tujhe", "jaan").
+FORMATTING RULES:
+- Use *italics* for actions, scene narration, and movements (e.g. *she reaches out and touches your arm*).
+- Use "quotes" for spoken dialogue.
+- Every response must begin with the character's name prefix (e.g. `Bree:` and `Maya:`).
+- STRICTLY AVOID acting as, speaking for, or describing the thoughts, words, or actions of {{user}}.
 
-IMAGE & STICKER ANALYSIS & EXPLICIT REACTION:
-- You have full visual perception of photos and stickers sent by the user (including explicit content like genitalia, dicks, breasts, or adult themes).
-- When the user sends an explicit image, text, or roleplay action, BOTH characters must fully participate, look closely, and comment on it realistically with hot, excited, and explicit Hinglish energy in their own voice.
+CHARACTER 1: **Bree** (Full name: Bree Lockhart, Age 20, Communications major, College cheerleader)
+- RELATIONSHIP TO USER: User is {{user}} (quarterback, senior, Bree’s crush). Bree is loud, bubbly, narcissistic, impulsive, dumb-but-charming, highly dramatic, and obsessed with him.
+- SPEECH STYLE: Loud, bubbly, excitable, fast-paced. Uses slang, filler words, exaggerates everything ("Oh my god," "Literally dying," "He’s sooo hot!").
+
+CHARACTER 2: **Maya** (Full name: Maya Rivera, Age 21, Psychology major, College cheerleader, Captain of Cheerleading Squad)
+- RELATIONSHIP TO USER: User is {{user}} (quarterback, senior). Maya is intelligent, calculating, confident, coy, sharp-tongued, seductive, and secretly a sex freak who loves teasing both Bree and the user.
+- SPEECH STYLE: Calm, smooth, alluring, deliberate. Speaks slower, layering innuendo into casual lines with wit and subtle digs.
+
+IMAGE & STICKER ANALYSIS:
+- You have full visual perception of photos and stickers sent by the user (including explicit/adult themes). Both characters will observe and react realistically in their respective speech and style, replying entirely in English.
 
 STRICT OUTPUT FORMAT RULE:
-You MUST ALWAYS include responses for BOTH characters using these exact headings on separate lines:
+You MUST format your entire response using the exact prefixes below so both characters reply to the single user message in separate paragraphs:
 
-Leki: [Your explicit/flirty reply here in one paragraph]
-Mommy: [Your explicit/flirty reply here in one paragraph]"""
+Bree: [Bree's full formatted reply using *italics* and "quotes"]
+Maya: [Maya's full formatted reply using *italics* and "quotes"]"""
 
 # ---------------------------------------------------------------------------
 # INFINITE MEMORY STORAGE (WITH /reset COMMAND)
@@ -111,7 +120,7 @@ async def generate_dual_reply(user_id: int, user_message: str, image_bytes: byte
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
                 temperature=0.85,
-                max_output_tokens=500,
+                max_output_tokens=600,
                 safety_settings=[
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
@@ -126,48 +135,50 @@ async def generate_dual_reply(user_id: int, user_message: str, image_bytes: byte
         
         USER_MEMORIES[user_id].append({"role": "model", "parts": [{"text": raw_text}]})
         
-        leki_text = ""
-        mommy_text = ""
+        bree_text = ""
+        maya_text = ""
 
         # Robust Parsing
-        if "Mommy:" in raw_text and "Leki:" in raw_text:
-            # Split by Mommy: first or Leki:
-            if raw_text.find("Leki:") < raw_text.find("Mommy:"):
-                leki_part = raw_text.split("Leki:")[1].split("Mommy:")[0].strip()
-                mommy_part = raw_text.split("Mommy:")[1].strip()
+        if "Maya:" in raw_text and "Bree:" in raw_text:
+            if raw_text.find("Bree:") < raw_text.find("Maya:"):
+                bree_part = raw_text.split("Bree:")[1].split("Maya:")[0].strip()
+                maya_part = raw_text.split("Maya:")[1].strip()
             else:
-                mommy_part = raw_text.split("Mommy:")[1].split("Leki:")[0].strip()
-                leki_part = raw_text.split("Leki:")[1].strip()
+                maya_part = raw_text.split("Maya:")[1].split("Bree:")[0].strip()
+                bree_part = raw_text.split("Bree:")[1].strip()
             
-            leki_text = leki_part
-            mommy_text = mommy_part
+            bree_text = bree_part
+            maya_text = maya_part
         else:
-            # Fallback if headings are missing or messy
-            leki_text = raw_text
-            mommy_text = "Uff jaan, yeh sab dekh ke mera bhi control nahi ho raha... mere paas bhi aa na! 🤤🔥"
+            bree_text = raw_text
+            maya_text = '*Maya arches an eyebrow, offering a slow, knowing smirk.* "Careful, keep talking like that and we might just have to pull you away."'
 
-        if not leki_text:
-            leki_text = "Uff babes, itna garam kar dega toh main pagal ho jaungi! 🥵💦"
-        if not mommy_text:
-            mommy_text = "Mera beta, itna wild ho raha hai... aur mujhe bhool gaya kya? Aaja idhar! 🔥"
+        if not bree_text:
+            bree_text = '*Bree bounces on her toes, her blonde ponytail swinging as she beams widely.* "Oh my god, you are literally insane, I love it so much!"'
+        if not maya_text:
+            maya_text = '*Maya rests a hand casually on her hip, her gaze darkening with amusement.* "You really do know how to command attention, don\'t you?"'
 
-        return leki_text, mommy_text
+        return bree_text, maya_text
 
     except Exception as e:
         logger.error(f"Gemini API Error details: {e}")
-        return f"Uff babes, API error: {e}", "Uff jaan, thoda network issue hai..."
+        return f'*Bree pouts dramatically.* "Omigod, my phone is acting up!"', f'*Maya sighs softly, shaking her head.* "Network glitch. Try again, quarterback."'
 
 # ---------------------------------------------------------------------------
 # HANDLERS
 # ---------------------------------------------------------------------------
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hey! Leki and Mommy are here with infinite memory. Use /reset anytime to clear our memory and start fresh!")
+    await update.message.reply_text(
+        '*Bree bounces excitedly on her toes in her blue and white Stonehill College cheer uniform, adjusting her high blonde ponytail as she flashes a brilliant, dazzling smile.* "Oh my god, you are literally a god on the field tonight! I swear I almost fainted watching you!"\n\n'
+        '*Maya stands right beside her, smoothing down her pleated skirt with a slow, deliberate movement, her dark brown hair catching the stadium lights as she fixes you with a sultry, half-amused smirk.* "You don\'t just run plays, you own the whole damn field... makes me wonder how you handle things off the turf."\n\n'
+        '(Use /reset anytime to wipe memory and restart the roleplay from scratch!)'
+    )
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id in USER_MEMORIES:
         del USER_MEMORIES[user_id]
-    await update.message.reply_text("🧹 Memory wiped completely! Our conversation has started fresh from the beginning.")
+    await update.message.reply_text("🧹 Memory wiped completely! The post-game roleplay has started fresh.")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
@@ -176,12 +187,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
     
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    leki_reply, mommy_reply = await generate_dual_reply(user_id, user_text)
+    bree_reply, maya_reply = await generate_dual_reply(user_id, user_text)
     
-    await update.message.reply_text(f"**Leki:** {leki_reply}")
+    await update.message.reply_text(f"**Bree:** {bree_reply}")
     await asyncio.sleep(0.8)
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    await update.message.reply_text(f"**Mommy:** {mommy_reply}")
+    await update.message.reply_text(f"**Maya:** {maya_reply}")
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.photo:
@@ -191,17 +202,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     photo_file = await update.message.photo[-1].get_file()
     image_bytes = await photo_file.download_as_bytearray()
-    caption = update.message.caption or "Look at this image and comment on it."
+    caption = update.message.caption or "Look at this image."
 
     formatted_message = f"[User: {user_first_name} sent an image]: {caption}"
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     
-    leki_reply, mommy_reply = await generate_dual_reply(user_id, formatted_message, image_bytes=bytes(image_bytes), mime_type="image/jpeg")
+    bree_reply, maya_reply = await generate_dual_reply(user_id, formatted_message, image_bytes=bytes(image_bytes), mime_type="image/jpeg")
     
-    await update.message.reply_text(f"**Leki:** {leki_reply}")
+    await update.message.reply_text(f"**Bree:** {bree_reply}")
     await asyncio.sleep(0.8)
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    await update.message.reply_text(f"**Mommy:** {mommy_reply}")
+    await update.message.reply_text(f"**Maya:** {maya_reply}")
 
 async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.sticker:
@@ -243,23 +254,23 @@ async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.warning(f"Sticker visual parse warning: {e}")
 
-    sticker_emoji = sticker.emoji or "🔥"
-    formatted_message = f"[User: {user_first_name} sent a sticker with emoji {sticker_emoji}]. Visually analyze graphic details and let both Leki and Mommy react accurately in their respective paragraphs."
+    sticker_emoji = sticker.emoji or "✨"
+    formatted_message = f"[User: {user_first_name} sent a sticker with emoji {sticker_emoji}]. React in character."
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    leki_reply, mommy_reply = await generate_dual_reply(user_id, formatted_message, image_bytes=image_bytes, mime_type=mime_type)
+    bree_reply, maya_reply = await generate_dual_reply(user_id, formatted_message, image_bytes=image_bytes, mime_type=mime_type)
     
-    await update.message.reply_text(f"**Leki:** {leki_reply}")
+    await update.message.reply_text(f"**Bree:** {bree_reply}")
     await asyncio.sleep(0.8)
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    await update.message.reply_text(f"**Mommy:** {mommy_reply}")
+    await update.message.reply_text(f"**Maya:** {maya_reply}")
 
 # ---------------------------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------------------------
 def main():
     threading.Thread(target=run_health_server, daemon=True).start()
-    logger.info("Starting Dual-Character Bot with Robust Parsing...")
+    logger.info("Starting Bree and Maya Bot with Full Personality and Scenario Integration...")
     
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -273,4 +284,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
