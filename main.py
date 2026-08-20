@@ -86,4 +86,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================== MAIN ==================
 def main():
-    if not all([
+    if not all([TELEGRAM_TOKEN, GEMINI_API_KEY, OWNER_ID]):
+        raise ValueError("Missing environment variables: TELEGRAM_BOT_TOKEN, GEMINI_API_KEY, OWNER_ID")
+
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    app.add_handler(MessageHandler(filters.TEXT & \~filters.COMMAND, handle_message))
+
+    print("Bot is running with gemini-2.0-flash-lite...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
+if __name__ == "__main__":
+    main()
