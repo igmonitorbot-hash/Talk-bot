@@ -10,7 +10,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OWNER_ID = int(os.getenv("OWNER_ID"))
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-2.0-flash-lite")
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -51,6 +51,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if user.id == OWNER_ID:
+        # Change only this part inside the OWNER section:
+
         try:
             prompt = f"{SEXTING_SYSTEM}\n\nOwner said: {text}\n\nYour reply:"
             response = model.generate_content(prompt)
@@ -58,7 +60,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(reply)
         except Exception as e:
             logger.error(f"Gemini error (owner): {e}")
-            await update.message.reply_text("Baby thoda wait karo... system hang ho gaya 😘")
+            await update.message.reply_text(f"Error aa gaya baby: {str(e)[:150]}")
     else:
         is_reply_to_bot = (
             update.message.reply_to_message
