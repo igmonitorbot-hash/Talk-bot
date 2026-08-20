@@ -7,7 +7,7 @@ import google.generativeai as genai
 # ================== CONFIG ==================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-OWNER_ID = int(os.getenv("OWNER_ID"))  # Your Telegram user ID
+OWNER_ID = int(os.getenv("OWNER_ID"))
 
 # Gemini setup
 genai.configure(api_key=GEMINI_API_KEY)
@@ -47,7 +47,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     text = update.message.text.strip()
 
-    # Only work in groups and private chats
     if chat.type not in ["group", "supergroup", "private"]:
         return
 
@@ -64,7 +63,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ========== ANYONE ELSE ==========
     else:
-        # Only reply if they mentioned the bot or replied to the bot
         is_reply_to_bot = (
             update.message.reply_to_message
             and update.message.reply_to_message.from_user
@@ -93,7 +91,6 @@ def main():
 
     app = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    # Listen to all text messages
     app.add_handler(MessageHandler(filters.TEXT & \~filters.COMMAND, handle_message))
 
     print("Bot is running with gemini-2.0-flash-lite...")
