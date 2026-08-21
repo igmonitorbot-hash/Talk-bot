@@ -155,7 +155,7 @@ def main():
     # /reset Sadie command
     app.add_handler(CommandHandler("reset", reset_memory))
 
-    app.add_handler(MessageHandler(filters.TEXT & \~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("Sadie is online with memory...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
